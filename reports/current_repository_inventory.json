@@ -1,0 +1,390 @@
+{
+  "schema_version": 1,
+  "note": "Inventory only; raw datasets are never modified by this script.",
+  "datasets": [
+    {
+      "dataset": "faceforensics",
+      "root": "FaceForensics-master",
+      "root_exists": true,
+      "media_files": 18,
+      "video_files": 0,
+      "image_files": 18,
+      "labels": {
+        "fake": 8,
+        "unknown": 10
+      },
+      "manipulation_categories": {
+        "DeepFakes": 8
+      },
+      "file_extensions": {
+        ".png": 18
+      },
+      "total_size_bytes": 4786070,
+      "video_statistics": {
+        "probed_videos": 0,
+        "resolutions": {},
+        "fps_min": null,
+        "fps_max": null,
+        "duration_min_seconds": null,
+        "duration_max_seconds": null
+      },
+      "files": [
+        {
+          "path": "FaceForensics-master/dataset/DeepFakes/faceswap-master/lib/gui/.cache/icons/clear.png",
+          "extension": ".png",
+          "size_bytes": 691,
+          "kind": "image",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/dataset/DeepFakes/faceswap-master/lib/gui/.cache/icons/graph.png",
+          "extension": ".png",
+          "size_bytes": 574,
+          "kind": "image",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/dataset/DeepFakes/faceswap-master/lib/gui/.cache/icons/move.png",
+          "extension": ".png",
+          "size_bytes": 550,
+          "kind": "image",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/dataset/DeepFakes/faceswap-master/lib/gui/.cache/icons/open_file.png",
+          "extension": ".png",
+          "size_bytes": 406,
+          "kind": "image",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/dataset/DeepFakes/faceswap-master/lib/gui/.cache/icons/open_folder.png",
+          "extension": ".png",
+          "size_bytes": 263,
+          "kind": "image",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/dataset/DeepFakes/faceswap-master/lib/gui/.cache/icons/reset.png",
+          "extension": ".png",
+          "size_bytes": 773,
+          "kind": "image",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/dataset/DeepFakes/faceswap-master/lib/gui/.cache/icons/save.png",
+          "extension": ".png",
+          "size_bytes": 530,
+          "kind": "image",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/dataset/DeepFakes/faceswap-master/lib/gui/.cache/icons/zoom.png",
+          "extension": ".png",
+          "size_bytes": 642,
+          "kind": "image",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/images/ex_deepfakedetection.png",
+          "extension": ".png",
+          "size_bytes": 1544031,
+          "kind": "image",
+          "label": "unknown",
+          "manipulation": null,
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/images/ex_deepfakedetection_mask.png",
+          "extension": ".png",
+          "size_bytes": 10190,
+          "kind": "image",
+          "label": "unknown",
+          "manipulation": null,
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/images/ex_deepfakes.png",
+          "extension": ".png",
+          "size_bytes": 236138,
+          "kind": "image",
+          "label": "unknown",
+          "manipulation": null,
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/images/ex_deepfakes_mask.png",
+          "extension": ".png",
+          "size_bytes": 2966,
+          "kind": "image",
+          "label": "unknown",
+          "manipulation": null,
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/images/ex_neuraltextures.png",
+          "extension": ".png",
+          "size_bytes": 241321,
+          "kind": "image",
+          "label": "unknown",
+          "manipulation": null,
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/images/ex_neuraltextures_mask.png",
+          "extension": ".png",
+          "size_bytes": 19130,
+          "kind": "image",
+          "label": "unknown",
+          "manipulation": null,
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/images/ex_original.png",
+          "extension": ".png",
+          "size_bytes": 236658,
+          "kind": "image",
+          "label": "unknown",
+          "manipulation": null,
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/images/ex_original_actors.png",
+          "extension": ".png",
+          "size_bytes": 1548620,
+          "kind": "image",
+          "label": "unknown",
+          "manipulation": null,
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/images/table4_faceshifter.png",
+          "extension": ".png",
+          "size_bytes": 69500,
+          "kind": "image",
+          "label": "unknown",
+          "manipulation": null,
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "FaceForensics-master/images/teaser.png",
+          "extension": ".png",
+          "size_bytes": 873087,
+          "kind": "image",
+          "label": "unknown",
+          "manipulation": null,
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        }
+      ]
+    },
+    {
+      "dataset": "celebdf",
+      "root": "celeb-deepfakeforensics-master",
+      "root_exists": true,
+      "media_files": 7,
+      "video_files": 1,
+      "image_files": 6,
+      "labels": {
+        "fake": 7
+      },
+      "manipulation_categories": {
+        "DeepFakes": 7
+      },
+      "file_extensions": {
+        ".png": 4,
+        ".jpg": 2,
+        ".mp4": 1
+      },
+      "total_size_bytes": 21697113,
+      "video_statistics": {
+        "probed_videos": 1,
+        "resolutions": {},
+        "fps_min": null,
+        "fps_max": null,
+        "duration_min_seconds": null,
+        "duration_max_seconds": null
+      },
+      "files": [
+        {
+          "path": "celeb-deepfakeforensics-master/Celeb-DF-v1/eval.png",
+          "extension": ".png",
+          "size_bytes": 420813,
+          "kind": "image",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "celeb-deepfakeforensics-master/Celeb-DF-v2/avg_auc.jpg",
+          "extension": ".jpg",
+          "size_bytes": 75960,
+          "kind": "image",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "celeb-deepfakeforensics-master/Celeb-DF-v2/basic_info.png",
+          "extension": ".png",
+          "size_bytes": 48511,
+          "kind": "image",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "celeb-deepfakeforensics-master/Celeb-DF-v2/demo.png",
+          "extension": ".png",
+          "size_bytes": 1030173,
+          "kind": "image",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "celeb-deepfakeforensics-master/src/cover.png",
+          "extension": ".png",
+          "size_bytes": 330670,
+          "kind": "image",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "celeb-deepfakeforensics-master/src/demo.mp4",
+          "extension": ".mp4",
+          "size_bytes": 19762261,
+          "kind": "video",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        },
+        {
+          "path": "celeb-deepfakeforensics-master/src/news.jpg",
+          "extension": ".jpg",
+          "size_bytes": 28725,
+          "kind": "image",
+          "label": "fake",
+          "manipulation": "DeepFakes",
+          "width": null,
+          "height": null,
+          "fps": null,
+          "duration_seconds": null,
+          "frame_count": null
+        }
+      ]
+    }
+  ]
+}

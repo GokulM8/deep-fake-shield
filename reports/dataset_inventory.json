@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "note": "Inventory only; raw datasets are never modified by this script.",
+  "datasets": [
+    {
+      "dataset": "faceforensics",
+      "root": "datasets/raw/faceforensics",
+      "root_exists": false,
+      "media_files": 0,
+      "video_files": 0,
+      "image_files": 0,
+      "labels": {},
+      "manipulation_categories": {},
+      "file_extensions": {},
+      "total_size_bytes": 0,
+      "video_statistics": {
+        "probed_videos": 0,
+        "resolutions": {},
+        "fps_min": null,
+        "fps_max": null,
+        "duration_min_seconds": null,
+        "duration_max_seconds": null
+      },
+      "files": []
+    },
+    {
+      "dataset": "celebdf",
+      "root": "datasets/raw/celebdf",
+      "root_exists": false,
+      "media_files": 0,
+      "video_files": 0,
+      "image_files": 0,
+      "labels": {},
+      "manipulation_categories": {},
+      "file_extensions": {},
+      "total_size_bytes": 0,
+      "video_statistics": {
+        "probed_videos": 0,
+        "resolutions": {},
+        "fps_min": null,
+        "fps_max": null,
+        "duration_min_seconds": null,
+        "duration_max_seconds": null
+      },
+      "files": []
+    }
+  ]
+}

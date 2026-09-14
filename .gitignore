@@ -1,0 +1,15 @@
+.DS_Store
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Licensed/raw media stays local and is never committed.
+datasets/raw/*
+!datasets/raw/.gitkeep
+
+# Generated training outputs can be large; keep the checked-in audit artifacts only.
+artifacts/frames/
+artifacts/manifests/
+artifacts/explainability/
+artifacts/logs/
