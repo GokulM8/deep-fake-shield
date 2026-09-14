@@ -13,3 +13,6 @@ artifacts/frames/
 artifacts/manifests/
 artifacts/explainability/
 artifacts/logs/
+artifacts/evaluation/
+artifacts/experiments/
+artifacts/timelines/

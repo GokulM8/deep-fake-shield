@@ -34,6 +34,31 @@ python3 scripts/split_dataset.py
 
 The audit writes `artifacts/dataset_report.json`; the deterministic video-level split writes `artifacts/splits/train.csv`, `val.csv`, and `test.csv`. The tooling accepts arbitrary nested layouts, records media paths and labels conservatively, probes video metadata, hashes files for duplicate detection, and does not download, move, or rewrite dataset files.
 
+## ML baseline commands
+
+Run the bounded CPU sanity test first:
+
+```bash
+python3 scripts/train_baseline.py --epochs 1 --limit 20 --frames-per-video 4
+python3 scripts/evaluate_baseline.py --checkpoint artifacts/experiments/baseline/best_model.pt
+```
+
+For a full experiment, set `--limit 0` and choose batch size, frame count, workers, and output directory for the available hardware. The baseline saves checkpoints, configuration, history, video-level predictions, frame timelines, and metrics under `artifacts/`. Metrics are generated from the actual run; no values are prefilled.
+
+The temporal stage uses frozen EfficientNet embeddings:
+
+```bash
+python3 scripts/train_temporal.py --backbone-checkpoint artifacts/experiments/baseline/best_model.pt --limit 20
+```
+
+Analyze one video after training:
+
+```bash
+python3 scripts/infer_video.py --video path/to/video.mp4 --checkpoint artifacts/experiments/baseline/best_model.pt
+```
+
+Grad-CAM support is available through `ml/explainability/gradcam.py`. It explains model activation patterns and is not proof of manipulation. The FastAPI service remains on placeholder inference until a full baseline experiment is explicitly selected for integration.
+
 ## Backend
 
 The backend MVP is in `backend/`. It provides secure upload validation, asynchronous analysis-job wiring, evidence contracts, and report/status endpoints. Its inference mode is intentionally marked `placeholder` until the trained baseline is connected.
