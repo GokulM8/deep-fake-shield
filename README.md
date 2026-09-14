@@ -16,6 +16,13 @@ datasets/raw/
 
 Raw data is never modified. Processed artifacts belong under `datasets/processed/`.
 
+## Dataset links
+
+- [Deepfake Detection Challenge dataset](https://www.kaggle.com/c/deepfake-detection/data?utm_source=chatgpt.com&select=deep-fake-dataset) - video deepfake detection data.
+- [Real and Fake Face Detection dataset](https://www.kaggle.com/datasets/ciplab/real-and-fake-face-detection) - real/fake face image data.
+
+Review each dataset's license and usage terms before downloading or redistributing media. Downloaded datasets should remain under `datasets/raw/` and are excluded from Git.
+
 ## Inspect datasets
 
 From the repository root:
