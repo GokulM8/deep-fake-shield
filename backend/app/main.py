@@ -7,6 +7,7 @@ from tempfile import gettempdir
 from uuid import uuid4
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile, status
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.schemas import (
     AnalysisCreateResponse,
@@ -47,6 +48,13 @@ MAGIC_SIGNATURES: dict[str, tuple[bytes, ...]] = {
 repository = AnalysisRepository()
 analysis_service = AnalysisService(repository)
 app = FastAPI(title="DeepFake Shield API", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173", "http://127.0.0.1:5500", "http://localhost:5500"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 
 def classify_media(filename: str) -> MediaType:
