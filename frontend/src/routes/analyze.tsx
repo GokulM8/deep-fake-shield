@@ -78,7 +78,7 @@ function AnalyzePage() {
       </div>
 
       <div className="mt-8 space-y-6">
-        <MockBanner />
+        {USING_MOCK_DATA ? <MockBanner /> : null}
 
         {file ? (
           <FilePreview file={file} onRemove={() => setFile(null)} onAnalyze={handleAnalyze} />
