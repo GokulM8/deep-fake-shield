@@ -38,19 +38,37 @@ class FaceCropper:
 
 
 class VideoFrameDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
-    def __init__(self, csv_path: Path, frames_per_video: int = 4, transform: Any = None) -> None:
+    def __init__(self, csv_path: Path, frames_per_video: int = 4, transform: Any = None, video_root: Path | None = None) -> None:
         with csv_path.open(newline="", encoding="utf-8") as csv_file:
             self.records = list(csv.DictReader(csv_file))
         self.frames_per_video = frames_per_video
         self.transform = transform
+        self.video_root = video_root
         self.cropper = FaceCropper()
+
+    def resolve_video_path(self, path: str) -> Path:
+        original = Path(path)
+        if original.exists() or self.video_root is None:
+            return original
+        marker = Path("datasets/raw")
+        try:
+            relative = Path(*original.parts[original.parts.index(marker.parts[0]) :])
+            marker_index = next(index for index in range(len(original.parts) - 1) if Path(*original.parts[index : index + 2]) == marker)
+            relative = Path(*original.parts[marker_index + len(marker.parts) :])
+            candidate = self.video_root / relative
+            if candidate.exists():
+                return candidate
+        except (ValueError, StopIteration):
+            pass
+        candidate = self.video_root / original.name
+        return candidate if candidate.exists() else original
 
     def __len__(self) -> int:
         return len(self.records)
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
         record = self.records[index]
-        capture = cv2.VideoCapture(record["video_path"])
+        capture = cv2.VideoCapture(str(self.resolve_video_path(record["video_path"])))
         frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         frames = []
         for frame_index in sample_frame_indices(frame_count, self.frames_per_video):

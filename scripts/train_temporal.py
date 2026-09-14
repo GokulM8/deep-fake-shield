@@ -50,10 +50,21 @@ def run_epoch(backbone, temporal, loader, device, optimizer=None):
     return metrics
 
 
+def balanced_indices(records, limit: int) -> list[int]:
+    if not limit or limit >= len(records):
+        return list(range(len(records)))
+    by_label = {0: [], 1: []}
+    for index, record in enumerate(records):
+        by_label[int(record["label"])].append(index)
+    per_class = limit // 2
+    return sorted(by_label[0][:per_class] + by_label[1][:per_class])
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--train-csv", type=Path, default=ROOT / "artifacts/splits/train.csv")
     parser.add_argument("--val-csv", type=Path, default=ROOT / "artifacts/splits/val.csv")
+    parser.add_argument("--video-root", type=Path, help="Mounted dataset root containing the raw dataset folders")
     parser.add_argument("--backbone-checkpoint", type=Path, required=True)
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--limit", type=int, default=20)
@@ -70,10 +81,11 @@ def main() -> int:
         transforms.Resize((224, 224)), transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
     ])
-    train = VideoFrameDataset(args.train_csv, args.frames, transform)
-    validation = VideoFrameDataset(args.val_csv, args.frames, transform)
+    train = VideoFrameDataset(args.train_csv, args.frames, transform, args.video_root)
+    validation = VideoFrameDataset(args.val_csv, args.frames, transform, args.video_root)
     if args.limit:
-        train, validation = Subset(train, range(min(args.limit, len(train)))), Subset(validation, range(min(args.limit, len(validation))))
+        train = Subset(train, balanced_indices(train.records, args.limit))
+        validation = Subset(validation, balanced_indices(validation.records, args.limit))
     train_loader = DataLoader(train, batch_size=args.batch_size, shuffle=True, num_workers=0)
     val_loader = DataLoader(validation, batch_size=args.batch_size, shuffle=False, num_workers=0)
     backbone = build_model().to(device)
