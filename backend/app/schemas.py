@@ -38,6 +38,9 @@ class EvidenceSignal(BaseModel):
 class AnalysisResult(BaseModel):
     verdict: Verdict
     confidence: float = Field(ge=0, le=1)
+    fake_probability: float | None = Field(default=None, ge=0, le=1)
+    real_probability: float | None = Field(default=None, ge=0, le=1)
+    frames_analyzed: int | None = Field(default=None, ge=0)
     signals: list[EvidenceSignal]
     suspicious_regions: list[str] = Field(default_factory=list)
     suspicious_frames: list[float] = Field(default_factory=list)

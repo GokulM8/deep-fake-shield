@@ -21,4 +21,7 @@ The API is available at `http://127.0.0.1:8000`. Interactive OpenAPI docs are at
 - `GET /api/v1/analyze/{analysis_id}/evidence` returns individual evidence signals.
 - `GET /api/v1/analyze/{analysis_id}/report` returns the report payload.
 
-The inference result is deliberately marked `placeholder` in `/health`. It is deterministic scaffolding for wiring real image, video, audio, metadata, provenance, and evidence-fusion engines later; it is not a trained detector.
+Video uploads use the EfficientNet-B0 checkpoint at `../models/deepfake_shield_video_v1.pt`.
+The model is loaded once at startup, samples two representative frames, applies the training
+face crop and ImageNet normalization, and returns the aggregated result through the existing
+analysis polling endpoints. Image and audio analysis remain placeholder signals.

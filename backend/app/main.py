@@ -19,6 +19,7 @@ from app.schemas import (
 )
 from app.services.analysis import AnalysisService, sha256_file
 from app.services.repository import AnalysisRepository
+from app.services.video_detector import VideoDetector
 
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 UPLOAD_ROOT = Path(gettempdir()) / "deepfake-shield-uploads"
@@ -46,7 +47,8 @@ MAGIC_SIGNATURES: dict[str, tuple[bytes, ...]] = {
 }
 
 repository = AnalysisRepository()
-analysis_service = AnalysisService(repository)
+video_detector = VideoDetector()
+analysis_service = AnalysisService(repository, video_detector)
 app = FastAPI(title="DeepFake Shield API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -86,7 +88,11 @@ def validate_signature(path: Path, filename: str) -> None:
 
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
-    return HealthResponse(status="ok", service="deepfake-shield-api", inference_mode="placeholder")
+    return HealthResponse(
+        status="ok" if video_detector.load_error is None else "degraded",
+        service="deepfake-shield-api",
+        inference_mode="efficientnet_b0_video",
+    )
 
 
 @app.post("/api/v1/analyze", response_model=AnalysisCreateResponse, status_code=status.HTTP_202_ACCEPTED)

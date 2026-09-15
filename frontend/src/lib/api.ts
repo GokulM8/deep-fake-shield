@@ -47,6 +47,9 @@ interface BackendRecord {
   result?: {
     verdict: "likely_authentic" | "likely_manipulated" | "likely_synthetic" | "inconclusive";
     confidence: number;
+    fake_probability?: number | null;
+    real_probability?: number | null;
+    frames_analyzed?: number | null;
     signals: BackendSignal[];
     suspicious_regions: string[];
     suspicious_frames: number[];
@@ -106,12 +109,21 @@ function toAnalysis(record: BackendRecord): Analysis {
     confidence: Math.round((result?.confidence ?? 0) * 100),
     createdAt: record.created_at,
     modelAnalysis: {
-      models: [],
+      models: result?.frames_analyzed
+        ? [
+            {
+              id: "efficientnet-b0",
+              label: "Video detector",
+              architecture: "EfficientNet-B0",
+              confidence: Math.round((result.confidence ?? 0) * 100),
+            },
+          ]
+        : [],
       overallConfidence: Math.round((result?.confidence ?? 0) * 100),
-      inputFrames: 0,
-      framesAnalyzed: 0,
-      facesDetected: 0,
-      facesAnalyzed: 0,
+      inputFrames: result?.frames_analyzed ?? 0,
+      framesAnalyzed: result?.frames_analyzed ?? 0,
+      facesDetected: result?.frames_analyzed ?? 0,
+      facesAnalyzed: result?.frames_analyzed ?? 0,
     },
     evidence,
     suspiciousFrames,

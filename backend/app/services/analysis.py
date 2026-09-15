@@ -11,13 +11,15 @@ from app.schemas import (
     Verdict,
 )
 from app.services.repository import AnalysisRepository
+from app.services.video_detector import VideoDetector, VideoInferenceError
 
 
 class AnalysisService:
     """Coordinates analysis jobs while keeping inference replaceable."""
 
-    def __init__(self, repository: AnalysisRepository) -> None:
+    def __init__(self, repository: AnalysisRepository, video_detector: VideoDetector) -> None:
         self.repository = repository
+        self.video_detector = video_detector
 
     def run(self, analysis_id: str, media_path: Path) -> None:
         record = self.repository.get(analysis_id)
@@ -25,8 +27,11 @@ class AnalysisService:
             return
 
         try:
-            payload = media_path.read_bytes()
-            result = self._placeholder_result(record.media_type, payload)
+            if record.media_type == MediaType.VIDEO:
+                result = self._video_result(media_path)
+            else:
+                payload = media_path.read_bytes()
+                result = self._placeholder_result(record.media_type, payload)
             completed = record.model_copy(
                 update={
                     "status": AnalysisStatus.COMPLETED,
@@ -35,7 +40,7 @@ class AnalysisService:
                 }
             )
             self.repository.update(completed)
-        except OSError as error:
+        except (OSError, VideoInferenceError) as error:
             failed = record.model_copy(
                 update={
                     "status": AnalysisStatus.FAILED,
@@ -44,6 +49,44 @@ class AnalysisService:
                 }
             )
             self.repository.update(failed)
+
+    def _video_result(self, media_path: Path) -> AnalysisResult:
+        prediction = self.video_detector.predict(media_path)
+        fake_probability = prediction["fake_probability"]
+        real_probability = prediction["real_probability"]
+        is_fake = prediction["prediction"] == "FAKE"
+        confidence = prediction["confidence"]
+        return AnalysisResult(
+            verdict=Verdict.LIKELY_MANIPULATED if is_fake else Verdict.LIKELY_AUTHENTIC,
+            confidence=confidence,
+            fake_probability=fake_probability,
+            real_probability=real_probability,
+            frames_analyzed=prediction["frames_analyzed"],
+            signals=[
+                EvidenceSignal(
+                    name="EfficientNet-B0 video model",
+                    score=fake_probability,
+                    level="high" if is_fake else "low",
+                    explanation=(
+                        "Mean fake probability across detected faces in two sampled frames; "
+                        "this score is a model probability, not calibrated certainty."
+                    ),
+                ),
+                EvidenceSignal(
+                    name="Face frame coverage",
+                    score=prediction["frames_analyzed"] / self.video_detector.frames,
+                    level="high" if prediction["frames_analyzed"] == self.video_detector.frames else "medium",
+                    explanation="Frames with no detectable face were skipped before inference.",
+                ),
+            ],
+            suspicious_regions=["face boundary"] if is_fake else [],
+            suspicious_frames=[
+                float(item["timestamp"])
+                for item in prediction["frame_scores"]
+                if item["fake_probability"] >= self.video_detector.threshold and item["timestamp"] is not None
+            ],
+            provenance="model checkpoint: deepfake_shield_video_v1.pt",
+        )
 
     @staticmethod
     def _placeholder_result(media_type: MediaType, payload: bytes) -> AnalysisResult:
