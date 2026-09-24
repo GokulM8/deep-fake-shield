@@ -134,8 +134,7 @@ function Landing() {
                 Analyze Media
               </Link>
               <Link
-                to="/analysis/$id"
-                params={{ id: "DF-2026-000124" }}
+                to="/investigations"
                 className="inline-flex items-center justify-center rounded-md border border-border-strong px-6 py-3 text-sm font-medium transition-colors hover:border-primary/50 hover:text-primary"
               >
                 Explore Investigation

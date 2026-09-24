@@ -2,49 +2,63 @@ import { Maximize2, Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { formatTimestamp } from "@/lib/mockData";
 
-/**
- * Deterministic preview surface. The demo build has no decodable media file, so
- * playback is simulated against the analysis duration. Swapping in a real
- * <video src> element later keeps the same props and control layout.
- */
 export function VideoPlayer({
+  src,
   posterUrl,
   filename,
   duration,
   currentTime,
   onTimeChange,
+  onDurationChange,
 }: {
+  src?: string;
   posterUrl: string;
   filename: string;
   duration: number;
   currentTime: number;
   onTimeChange: (t: number) => void;
+  onDurationChange?: (duration: number) => void;
 }) {
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
   const [volume, setVolume] = useState(60);
   const containerRef = useRef<HTMLDivElement>(null);
-  const timeRef = useRef(currentTime);
-  timeRef.current = currentTime;
+  const videoRef = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (playing) void video.play();
+    else video.pause();
+  }, [playing]);
 
   useEffect(() => {
-    if (!playing) return;
-    const interval = setInterval(() => {
-      const next = timeRef.current + 0.1;
-      onTimeChange(next >= duration ? 0 : Number(next.toFixed(2)));
-    }, 100);
-    return () => clearInterval(interval);
-  }, [playing, duration, onTimeChange]);
+    if (videoRef.current) videoRef.current.currentTime = currentTime;
+  }, [currentTime]);
 
   return (
     <div ref={containerRef} className="overflow-hidden rounded-md border border-border bg-black">
       <div className="relative aspect-video">
-        <img
-          src={posterUrl}
-          alt={`Preview frame of ${filename}`}
-          className="h-full w-full object-cover"
-          style={{ filter: playing ? "contrast(1.05)" : "none" }}
-        />
+        {src ? (
+          <video
+            ref={videoRef}
+            src={src}
+            poster={posterUrl}
+            muted={muted}
+            playsInline
+            className="h-full w-full object-cover"
+            onLoadedMetadata={(event) => onDurationChange?.(event.currentTarget.duration)}
+            onTimeUpdate={(event) => onTimeChange(event.currentTarget.currentTime)}
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
+            onEnded={() => setPlaying(false)}
+          />
+        ) : (
+          <img
+            src={posterUrl}
+            alt={`Preview frame of ${filename}`}
+            className="h-full w-full object-cover"
+          />
+        )}
         {playing ? (
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             <div className="animate-scan h-10 w-full bg-gradient-to-b from-transparent via-primary/15 to-transparent" />
@@ -66,7 +80,11 @@ export function VideoPlayer({
           max={duration}
           step={0.1}
           value={currentTime}
-          onChange={(e) => onTimeChange(Number(e.target.value))}
+          onChange={(e) => {
+            const nextTime = Number(e.target.value);
+            onTimeChange(nextTime);
+            if (videoRef.current) videoRef.current.currentTime = nextTime;
+          }}
           aria-label="Seek"
           className="h-1 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
         />

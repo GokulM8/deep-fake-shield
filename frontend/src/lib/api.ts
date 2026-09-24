@@ -8,8 +8,9 @@ import type {
   Verdict,
 } from "./types";
 
-export const USING_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === "true";
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000").replace(
+export const USING_MOCK_DATA = import.meta.env["VITE_USE_MOCK_DATA"] === "true";
+const uploadedVideoUrls = new Map<string, string>();
+const API_BASE_URL = (import.meta.env["VITE_API_BASE_URL"] ?? "http://127.0.0.1:8000").replace(
   /\/$/,
   "",
 );
@@ -26,11 +27,21 @@ export interface AnalyzeMediaResponse {
   status: Analysis["status"];
 }
 
+export function getUploadedVideoUrl(analysisId: string): string | undefined {
+  return uploadedVideoUrls.get(analysisId);
+}
+
 interface BackendSignal {
   name: string;
   score: number;
   level: string;
   explanation: string;
+}
+
+interface BackendFrameScore {
+  frame_id: number;
+  timestamp?: number | null;
+  fake_probability: number;
 }
 
 interface BackendRecord {
@@ -50,6 +61,11 @@ interface BackendRecord {
     fake_probability?: number | null;
     real_probability?: number | null;
     frames_analyzed?: number | null;
+    frame_scores?: BackendFrameScore[];
+    duration_seconds?: number | null;
+    frame_rate?: number | null;
+    width?: number | null;
+    height?: number | null;
     signals: BackendSignal[];
     suspicious_regions: string[];
     suspicious_frames: number[];
@@ -91,7 +107,10 @@ function toAnalysis(record: BackendRecord): Analysis {
     frame: index,
     timestamp: `${time.toFixed(2)}s`,
     time,
-    score: 0,
+    score: Math.round(
+      (result?.frame_scores?.find((frame) => frame.timestamp === time)?.fake_probability ?? 0) *
+        100,
+    ),
     severity: "UNKNOWN" as Severity,
     thumbnailUrl: "",
     heatmapUrl: null,
@@ -100,6 +119,13 @@ function toAnalysis(record: BackendRecord): Analysis {
     explanation:
       "The backend reported a suspicious timestamp; frame-level evidence is not available yet.",
   }));
+  const timeline = (result?.frame_scores ?? [])
+    .filter((frame) => frame.timestamp !== null && frame.timestamp !== undefined)
+    .map((frame) => ({
+      time: frame.timestamp as number,
+      frame: frame.frame_id,
+      score: Math.round(frame.fake_probability * 100),
+    }));
   return {
     id: record.analysis_id,
     filename: record.filename,
@@ -127,16 +153,19 @@ function toAnalysis(record: BackendRecord): Analysis {
     },
     evidence,
     suspiciousFrames,
-    timeline: [],
+    timeline,
     metadata: {
       filename: record.filename,
       format: record.content_type,
       size: `${(record.size_bytes / 1_000_000).toFixed(2)} MB`,
-      resolution: "Not available",
-      frameRate: "Not available",
+      resolution:
+        result?.width && result?.height ? `${result.width} x ${result.height}` : "Not available",
+      frameRate: result?.frame_rate ? `${result.frame_rate.toFixed(2)} fps` : "Not available",
       videoCodec: "Not available",
       audioCodec: "Not available",
-      duration: "Not available",
+      duration: result?.duration_seconds
+        ? `${result.duration_seconds.toFixed(2)} s`
+        : "Not available",
       creationTime: record.created_at,
       softwareTag: "Not available",
     },
@@ -170,7 +199,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 /** POST /api/v1/analyze */
 export async function analyzeMedia(input: AnalyzeMediaInput): Promise<AnalyzeMediaResponse> {
   if (USING_MOCK_DATA) {
-    const analysisId = Object.keys(MOCK_ANALYSES)[0];
+    const analysisId = Object.keys(MOCK_ANALYSES)[0] ?? "unknown";
     return { analysisId, status: "processing" };
   }
   if (!input.file) throw new Error("A media file is required for backend analysis");
@@ -182,12 +211,18 @@ export async function analyzeMedia(input: AnalyzeMediaInput): Promise<AnalyzeMed
   });
   if (typeof window !== "undefined")
     window.sessionStorage.setItem(`dfs:submitted:${record.analysis_id}`, JSON.stringify(input));
+  if (input.file?.type.startsWith("video/")) {
+    uploadedVideoUrls.set(record.analysis_id, URL.createObjectURL(input.file));
+  }
   return { analysisId: record.analysis_id, status: record.status };
 }
 
 /** GET /api/v1/analyze/{analysis_id} */
 export async function getAnalysis(id: string): Promise<Analysis> {
-  if (USING_MOCK_DATA) return MOCK_ANALYSES[id] ?? MOCK_ANALYSES[Object.keys(MOCK_ANALYSES)[0]];
+  if (USING_MOCK_DATA) {
+    const fallbackId = Object.keys(MOCK_ANALYSES)[0] ?? id;
+    return MOCK_ANALYSES[id] ?? MOCK_ANALYSES[fallbackId]!;
+  }
   return toAnalysis(await request<BackendRecord>(`/api/v1/analyze/${encodeURIComponent(id)}`));
 }
 
@@ -213,7 +248,20 @@ export async function getReport(id: string): Promise<Analysis> {
 
 /** GET /api/v1/analyze (history) */
 export async function listInvestigations(): Promise<AnalysisSummary[]> {
-  return MOCK_INVESTIGATIONS;
+  if (USING_MOCK_DATA) return MOCK_INVESTIGATIONS;
+  const records = await request<BackendRecord[]>("/api/v1/analyze");
+  return records.map((record) => {
+    const analysis = toAnalysis(record);
+    return {
+      id: analysis.id,
+      filename: analysis.filename,
+      mediaType: analysis.mediaType,
+      verdict: analysis.verdict,
+      confidence: analysis.confidence,
+      createdAt: analysis.createdAt,
+      status: analysis.status,
+    };
+  });
 }
 
 export const analysisQuery = (id: string) => ({

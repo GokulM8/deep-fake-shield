@@ -13,9 +13,8 @@ export function Footer() {
             </span>
           </div>
           <p className="mt-2 max-w-xl text-xs leading-relaxed text-muted-foreground">
-            AI-assisted digital media authenticity and forensic analysis. Results are investigative
-            signals, not legal certainty. This build runs on demonstration fixtures — no live model
-            inference is performed.
+            AI-assisted digital media authenticity and forensic analysis. Video uploads use the live
+            EfficientNet-B0 model. Results are investigative signals, not legal certainty.
           </p>
         </div>
         <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">

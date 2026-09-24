@@ -3,7 +3,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { Download, FileText, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import sampleFrame from "@/assets/sample-frame.jpg";
-import { analysisQuery, USING_MOCK_DATA } from "@/lib/api";
+import { analysisQuery, getUploadedVideoUrl, USING_MOCK_DATA } from "@/lib/api";
 import type { SuspiciousFrame } from "@/lib/types";
 import { MockBanner } from "@/components/common/MockBanner";
 import { Panel, SectionTitle } from "@/components/common/primitives";
@@ -48,10 +48,12 @@ function AnalysisDashboard() {
   const { id } = Route.useParams();
   const { data: analysis } = useSuspenseQuery(analysisQuery(id));
   const [currentTime, setCurrentTime] = useState(0);
+  const [mediaDuration, setMediaDuration] = useState<number | null>(null);
   const [inspected, setInspected] = useState<SuspiciousFrame | null>(null);
 
   const isVideo = analysis.mediaType === "video";
-  const duration = analysis.timeline[analysis.timeline.length - 1]?.time ?? 12;
+  const duration = mediaDuration ?? analysis.timeline[analysis.timeline.length - 1]?.time ?? 12;
+  const peakScore = Math.max(0, ...analysis.timeline.map((point) => point.score));
 
   function seekAndInspect(time: number) {
     setCurrentTime(time);
@@ -130,11 +132,15 @@ function AnalysisDashboard() {
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           {isVideo ? (
             <VideoPlayer
+              {...(getUploadedVideoUrl(analysis.id) != null
+                ? { src: getUploadedVideoUrl(analysis.id)! }
+                : {})}
               posterUrl={sampleFrame}
               filename={analysis.filename}
               duration={duration}
               currentTime={currentTime}
               onTimeChange={setCurrentTime}
+              onDurationChange={setMediaDuration}
             />
           ) : (
             <Panel className="overflow-hidden p-0">
@@ -183,9 +189,27 @@ function AnalysisDashboard() {
             </div>
             <p className="mt-5 text-xs leading-relaxed text-muted-foreground">
               {isVideo
-                ? "Highest sustained anomaly response occurs between 00:03 and 00:06, with a secondary cluster near 00:09."
+                ? `The highest sampled fake probability is ${peakScore}% across ${analysis.modelAnalysis.framesAnalyzed} analyzed frame${analysis.modelAnalysis.framesAnalyzed === 1 ? "" : "s"}.`
                 : "Strongest anomaly response is concentrated on the facial boundary and mouth region."}
             </p>
+            <div className="mt-5 border-t border-border pt-4">
+              <p className="label-caps">Sampled frame scores</p>
+              <div className="mt-3 space-y-2">
+                {analysis.timeline.map((point) => (
+                  <button
+                    key={point.frame}
+                    type="button"
+                    onClick={() => seekAndInspect(point.time)}
+                    className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 text-left text-xs hover:text-primary"
+                  >
+                    <span className="font-mono text-muted-foreground">
+                      Frame {point.frame} · {point.time.toFixed(2)}s
+                    </span>
+                    <span className="font-mono tabular-nums">{point.score}% fake</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </Panel>
         </div>
 

@@ -41,11 +41,13 @@ export const Route = createFileRoute("/analyze")({
 function AnalyzePage() {
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   async function handleAnalyze() {
     if (!file) return;
     setSubmitting(true);
+    setError(null);
     try {
       const { analysisId } = await analyzeMedia({
         file,
@@ -54,6 +56,12 @@ function AnalyzePage() {
         sizeBytes: file.size,
       });
       navigate({ to: "/analysis/$id/processing", params: { id: analysisId } });
+    } catch (submissionError) {
+      setError(
+        submissionError instanceof Error
+          ? submissionError.message
+          : "Unable to start analysis. Check that the backend is running.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -72,8 +80,8 @@ function AnalyzePage() {
           Analyze Digital Media
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-          Upload an image, video, or audio file for AI-assisted forensic analysis. The video and
-          image workflows are fully implemented; the audio pipeline is queued for release.
+          Upload a video for live EfficientNet analysis. Image and audio model pipelines are queued
+          for a later release.
         </p>
       </div>
 
@@ -130,6 +138,15 @@ function AnalyzePage() {
               ))}
             </div>
           </div>
+        ) : null}
+
+        {error ? (
+          <p
+            role="alert"
+            className="rounded-md border border-severity-high/40 bg-severity-high/10 px-4 py-3 text-sm text-severity-high"
+          >
+            {error}
+          </p>
         ) : null}
 
         {submitting ? (
