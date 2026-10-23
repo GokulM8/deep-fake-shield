@@ -16,3 +16,4 @@ artifacts/logs/
 artifacts/evaluation/
 artifacts/experiments/
 artifacts/timelines/
+._*
