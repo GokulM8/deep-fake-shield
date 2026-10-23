@@ -4,10 +4,12 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import gettempdir
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from app.schemas import (
     AnalysisCreateResponse,
@@ -24,6 +26,10 @@ from app.services.video_detector import VideoDetector
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 UPLOAD_ROOT = Path(gettempdir()) / "deepfake-shield-uploads"
 UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+# Records live in memory, so artifacts from a previous process can never be requested again.
+ARTIFACT_ROOT = Path(gettempdir()) / "deepfake-shield-artifacts"
+shutil.rmtree(ARTIFACT_ROOT, ignore_errors=True)
+ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_MEDIA: dict[MediaType, set[str]] = {
     MediaType.IMAGE: {".jpg", ".jpeg", ".png", ".webp"},
@@ -48,11 +54,18 @@ MAGIC_SIGNATURES: dict[str, tuple[bytes, ...]] = {
 
 repository = AnalysisRepository()
 video_detector = VideoDetector()
-analysis_service = AnalysisService(repository, video_detector)
+analysis_service = AnalysisService(repository, video_detector, artifact_root=ARTIFACT_ROOT)
 app = FastAPI(title="DeepFake Shield API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:5173", "http://localhost:5173", "http://127.0.0.1:5500", "http://localhost:5500"],
+    allow_origins=[
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
+        "http://127.0.0.1:5500",
+        "http://localhost:5500",
+        "http://127.0.0.1:8080",
+        "http://localhost:8080",
+    ],
     allow_credentials=False,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
@@ -158,6 +171,11 @@ def get_analysis(analysis_id: str) -> AnalysisRecord:
     return get_record_or_404(analysis_id)
 
 
+@app.get("/api/v1/analyze", response_model=list[AnalysisRecord])
+def list_analyses() -> list[AnalysisRecord]:
+    return repository.list()
+
+
 @app.get("/api/v1/analyze/{analysis_id}/evidence", response_model=list[EvidenceSignal])
 def get_evidence(analysis_id: str) -> list[EvidenceSignal]:
     record = get_record_or_404(analysis_id)
@@ -167,3 +185,12 @@ def get_evidence(analysis_id: str) -> list[EvidenceSignal]:
 @app.get("/api/v1/analyze/{analysis_id}/report", response_model=AnalysisRecord)
 def get_report(analysis_id: str) -> AnalysisRecord:
     return get_record_or_404(analysis_id)
+
+
+@app.get("/api/v1/analyze/{analysis_id}/frames/{frame_id}/{kind}")
+def get_frame_artifact(analysis_id: str, frame_id: int, kind: Literal["frame", "heatmap"]) -> FileResponse:
+    get_record_or_404(analysis_id)
+    path = ARTIFACT_ROOT / analysis_id / f"{kind}_{frame_id}.jpg"
+    if not path.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Frame artifact not found")
+    return FileResponse(path, media_type="image/jpeg")

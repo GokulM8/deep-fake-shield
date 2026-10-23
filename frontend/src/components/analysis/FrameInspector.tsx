@@ -2,7 +2,16 @@ import { X } from "lucide-react";
 import { useEffect } from "react";
 import type { SuspiciousFrame } from "@/lib/types";
 import { SeverityBadge } from "@/components/common/primitives";
+import { cn } from "@/lib/utils";
+import { FrameImage } from "./FramePreview";
 import { HeatmapViewer } from "./HeatmapViewer";
+
+const scoreColor = {
+  HIGH: "text-severity-high",
+  MEDIUM: "text-severity-medium",
+  LOW: "text-severity-low",
+  UNKNOWN: "text-severity-unknown",
+} as const;
 
 export function FrameInspector({
   frame,
@@ -44,25 +53,23 @@ export function FrameInspector({
         <div className="grid gap-5 p-5 lg:grid-cols-2">
           <div className="space-y-3">
             <p className="label-caps">Original Frame</p>
-            <div className="aspect-video overflow-hidden rounded-md border border-border bg-black">
-              <img
-                src={frame.thumbnailUrl}
-                alt={`Original frame ${frame.frame}`}
-                loading="lazy"
-                className="h-full w-full object-cover"
-              />
-            </div>
+            <FrameImage
+              frame={frame}
+              alt={`Original frame ${frame.frame}`}
+              showFaceBox
+              className="rounded-md border border-border"
+            />
           </div>
           <div className="space-y-3">
             <p className="label-caps">Model Attention Heatmap</p>
-            <HeatmapViewer frameUrl={frame.thumbnailUrl} heatmapUrl={frame.heatmapUrl} />
+            <HeatmapViewer frame={frame} />
           </div>
         </div>
 
         <div className="grid gap-3 border-t border-border p-5 sm:grid-cols-3">
           <div className="rounded-md border border-border bg-muted/30 p-4">
             <p className="label-caps">Frame Score</p>
-            <p className="mt-1.5 font-mono text-2xl tabular-nums text-severity-high">
+            <p className={cn("mt-1.5 font-mono text-2xl tabular-nums", scoreColor[frame.severity])}>
               {frame.score.toFixed(1)}%
             </p>
           </div>
@@ -78,10 +85,13 @@ export function FrameInspector({
 
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 border-t border-border p-5">
           <p className="min-w-0 text-sm leading-relaxed text-muted-foreground">
-            {frame.explanation}{" "}
-            <span className="text-foreground">
-              Demonstration visualisation — not a real model output.
-            </span>
+            {frame.explanation}
+            {frame.heatmapUrl ? null : (
+              <span className="text-foreground">
+                {" "}
+                Demonstration visualisation — not a real model output.
+              </span>
+            )}
           </p>
           <SeverityBadge severity={frame.severity} />
         </div>

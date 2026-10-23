@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Download, FileText, RotateCcw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import sampleFrame from "@/assets/sample-frame.jpg";
-import { analysisQuery, getUploadedVideoUrl, USING_MOCK_DATA } from "@/lib/api";
+import { analysisQuery, getUploadedMediaUrl, USING_MOCK_DATA } from "@/lib/api";
 import type { SuspiciousFrame } from "@/lib/types";
 import { MockBanner } from "@/components/common/MockBanner";
 import { Panel, SectionTitle } from "@/components/common/primitives";
@@ -50,6 +50,10 @@ function AnalysisDashboard() {
   const [currentTime, setCurrentTime] = useState(0);
   const [mediaDuration, setMediaDuration] = useState<number | null>(null);
   const [inspected, setInspected] = useState<SuspiciousFrame | null>(null);
+  // Read after mount: the object URL only exists in the uploading tab, never during SSR.
+  const [uploadedUrl, setUploadedUrl] = useState<string | undefined>(undefined);
+  useEffect(() => setUploadedUrl(getUploadedMediaUrl(id)), [id]);
+  const previewUrl = uploadedUrl ?? (USING_MOCK_DATA ? sampleFrame : undefined);
 
   const isVideo = analysis.mediaType === "video";
   const duration = mediaDuration ?? analysis.timeline[analysis.timeline.length - 1]?.time ?? 12;
@@ -132,10 +136,8 @@ function AnalysisDashboard() {
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           {isVideo ? (
             <VideoPlayer
-              {...(getUploadedVideoUrl(analysis.id) != null
-                ? { src: getUploadedVideoUrl(analysis.id)! }
-                : {})}
-              posterUrl={sampleFrame}
+              {...(uploadedUrl != null ? { src: uploadedUrl } : {})}
+              {...(USING_MOCK_DATA ? { posterUrl: sampleFrame } : {})}
               filename={analysis.filename}
               duration={duration}
               currentTime={currentTime}
@@ -145,23 +147,31 @@ function AnalysisDashboard() {
           ) : (
             <Panel className="overflow-hidden p-0">
               <div className="relative aspect-video overflow-hidden bg-black">
-                <img
-                  src={sampleFrame}
-                  alt={analysis.filename}
-                  className="h-full w-full object-cover"
-                />
+                {previewUrl ? (
+                  <img
+                    src={previewUrl}
+                    alt={analysis.filename}
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  <MediaUnavailable />
+                )}
                 <div className="pointer-events-none absolute inset-0 grid-backdrop opacity-30" />
-                <div className="pointer-events-none absolute left-[22%] top-[18%] h-[46%] w-[34%] rounded-sm border border-severity-high/70">
-                  <span className="absolute -top-6 left-0 label-caps text-[10px] text-severity-high">
-                    Face boundary · HIGH
-                  </span>
-                </div>
+                {USING_MOCK_DATA ? (
+                  <div className="pointer-events-none absolute left-[22%] top-[18%] h-[46%] w-[34%] rounded-sm border border-severity-high/70">
+                    <span className="absolute -top-6 left-0 label-caps text-[10px] text-severity-high">
+                      Face boundary · HIGH
+                    </span>
+                  </div>
+                ) : null}
               </div>
               <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5">
                 <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
                   {analysis.filename}
                 </span>
-                <span className="label-caps shrink-0">Region overlay · mock</span>
+                {USING_MOCK_DATA ? (
+                  <span className="label-caps shrink-0">Region overlay · mock</span>
+                ) : null}
               </div>
             </Panel>
           )}
@@ -176,7 +186,10 @@ function AnalysisDashboard() {
                 ["Frame rate", analysis.metadata.frameRate],
                 ["Frames analyzed", String(analysis.modelAnalysis.framesAnalyzed)],
                 ["Faces analyzed", String(analysis.modelAnalysis.facesAnalyzed)],
-                ["Suspicious regions", String(analysis.suspiciousFrames.length)],
+                [
+                  "Suspicious regions",
+                  String(analysis.suspiciousFrames.filter((f) => f.flagged ?? true).length),
+                ],
               ].map(([k, v]) => (
                 <div
                   key={k}
@@ -288,6 +301,17 @@ function AnalysisDashboard() {
       </div>
 
       <FrameInspector frame={inspected} onClose={() => setInspected(null)} />
+    </div>
+  );
+}
+
+function MediaUnavailable() {
+  return (
+    <div className="grid h-full w-full place-items-center px-6 text-center">
+      <p className="text-sm text-muted-foreground">
+        Preview unavailable. The original file is not stored after analysis, so it can only be shown
+        in the tab that uploaded it.
+      </p>
     </div>
   );
 }

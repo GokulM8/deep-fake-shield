@@ -24,6 +24,7 @@ from models.efficientnet_baseline import build_model  # noqa: E402
 DEFAULT_THRESHOLD = 0.5
 DEFAULT_FRAMES = 2
 MODEL_FILENAME = "deepfake_shield_video_v1.pt"
+ARTIFACT_MAX_WIDTH = 640
 
 
 class VideoInferenceError(RuntimeError):
@@ -66,7 +67,9 @@ class VideoDetector:
         model.eval()
         return model
 
-    def predict(self, video_path: Path) -> dict[str, Any]:
+    def predict(self, video_path: Path, artifact_dir: Path | None = None) -> dict[str, Any]:
+        """Score sampled frames; with ``artifact_dir``, also write ``frame_<id>.jpg`` and
+        ``heatmap_<id>.jpg`` (Grad-CAM over the face crop) for each analyzed frame."""
         if self.load_error is not None or self.model is None:
             detail = str(self.load_error) if self.load_error else "Model is not loaded"
             raise VideoInferenceError(f"Model loading failed: {detail}")
@@ -78,31 +81,41 @@ class VideoDetector:
 
         frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         fps = float(capture.get(cv2.CAP_PROP_FPS) or 0)
+        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
         if frame_count <= 0:
             capture.release()
             raise VideoInferenceError("Uploaded video contains no readable frames")
 
         images: list[torch.Tensor] = []
         frame_indices: list[int] = []
+        frames: list[np.ndarray] = []
+        boxes: list[tuple[int, int, int, int]] = []
         for frame_index in sample_frame_indices(frame_count, self.frames):
             capture.set(cv2.CAP_PROP_POS_FRAMES, int(frame_index))
             ok, frame = capture.read()
             if not ok:
                 continue
-            crop = self.cropper.crop(frame)
-            if crop is None:
+            box = self.cropper.locate(frame)
+            if box is None:
                 continue
-            rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+            left, top, right, bottom = box
+            rgb = cv2.cvtColor(frame[top:bottom, left:right], cv2.COLOR_BGR2RGB)
             images.append(self.transform(Image.fromarray(rgb)))
             frame_indices.append(int(frame_index))
+            frames.append(frame)
+            boxes.append(box)
         capture.release()
 
         if not images:
             raise VideoInferenceError("No detectable face was found in the sampled video frames")
 
         batch = torch.stack(images).to(self.device)
-        with torch.no_grad():
-            probabilities = torch.softmax(self.model(batch), dim=1)[:, 1].cpu().tolist()
+        probabilities, cams = self._predict_with_gradcam(batch)
+        if artifact_dir is not None:
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            for frame_index, frame, box, cam in zip(frame_indices, frames, boxes, cams):
+                _write_frame_artifacts(artifact_dir, frame_index, frame, box, cam)
         fake_probability = float(np.mean(probabilities))
         real_probability = 1.0 - fake_probability
         prediction = "FAKE" if fake_probability >= self.threshold else "REAL"
@@ -112,8 +125,9 @@ class VideoDetector:
                 "frame_id": frame_index,
                 "timestamp": round(frame_index / fps, 3) if fps else None,
                 "fake_probability": round(float(probability), 6),
+                "face_box": list(box),
             }
-            for frame_index, probability in zip(frame_indices, probabilities)
+            for frame_index, probability, box in zip(frame_indices, probabilities, boxes)
         ]
         return {
             "prediction": prediction,
@@ -121,5 +135,60 @@ class VideoDetector:
             "fake_probability": round(fake_probability, 6),
             "real_probability": round(real_probability, 6),
             "frames_analyzed": len(images),
+            "duration_seconds": frame_count / fps if fps else None,
+            "frame_rate": fps or None,
+            "width": width or None,
+            "height": height or None,
             "frame_scores": frame_scores,
         }
+
+    def _predict_with_gradcam(self, batch: torch.Tensor) -> tuple[list[float], np.ndarray]:
+        """Return per-image fake probabilities and Grad-CAM maps for the fake logit."""
+        assert self.model is not None
+        captured: dict[str, torch.Tensor] = {}
+
+        def keep_activation(_module: torch.nn.Module, _inputs: Any, output: torch.Tensor) -> None:
+            output.retain_grad()
+            captured["activation"] = output
+
+        handle = self.model.features[-1].register_forward_hook(keep_activation)
+        try:
+            logits = self.model(batch)
+            self.model.zero_grad(set_to_none=True)
+            # Eval-mode BatchNorm keeps samples independent, so one backward pass gives each its own map.
+            logits[:, 1].sum().backward()
+        finally:
+            handle.remove()
+
+        activation = captured["activation"]
+        weights = activation.grad.mean(dim=(2, 3), keepdim=True)
+        cams = torch.relu((weights * activation).sum(dim=1))
+        peaks = cams.flatten(1).amax(dim=1).clamp_min(1e-8)[:, None, None]
+        probabilities = torch.softmax(logits, dim=1)[:, 1].detach().cpu().tolist()
+        return probabilities, (cams / peaks).detach().cpu().numpy()
+
+
+def _write_frame_artifacts(
+    artifact_dir: Path,
+    frame_index: int,
+    frame: np.ndarray,
+    box: tuple[int, int, int, int],
+    cam: np.ndarray,
+) -> None:
+    """Save the full frame and a same-sized heatmap (black outside the face crop) for overlaying."""
+    left, top, right, bottom = box
+    face_cam = cv2.resize(cam.astype(np.float32), (right - left, bottom - top), interpolation=cv2.INTER_CUBIC)
+    face_cam = np.clip(face_cam, 0, 1)
+    colored = cv2.applyColorMap((face_cam * 255).astype(np.uint8), cv2.COLORMAP_JET)
+    heatmap = np.zeros_like(frame)
+    # Fade by activation so weak regions stay dark and vanish under a screen blend.
+    heatmap[top:bottom, left:right] = (colored * face_cam[..., None]).astype(np.uint8)
+
+    height, width = frame.shape[:2]
+    if width > ARTIFACT_MAX_WIDTH:
+        size = (ARTIFACT_MAX_WIDTH, round(height * ARTIFACT_MAX_WIDTH / width))
+        frame = cv2.resize(frame, size, interpolation=cv2.INTER_AREA)
+        heatmap = cv2.resize(heatmap, size, interpolation=cv2.INTER_AREA)
+    quality = [cv2.IMWRITE_JPEG_QUALITY, 85]
+    cv2.imwrite(str(artifact_dir / f"frame_{frame_index}.jpg"), frame, quality)
+    cv2.imwrite(str(artifact_dir / f"heatmap_{frame_index}.jpg"), heatmap, quality)

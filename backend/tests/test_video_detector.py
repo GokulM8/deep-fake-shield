@@ -47,3 +47,14 @@ def test_video_without_detectable_face_fails_cleanly(tmp_path: Path) -> None:
     writer.release()
     with pytest.raises(VideoInferenceError, match="No detectable face"):
         VideoDetector().predict(path)
+
+def test_inference_writes_frame_and_gradcam_artifacts(tmp_path: Path) -> None:
+    result = VideoDetector().predict(SAMPLE_VIDEO, artifact_dir=tmp_path)
+    for score in result["frame_scores"]:
+        left, top, right, bottom = score["face_box"]
+        assert 0 <= left < right and 0 <= top < bottom
+        frame = cv2.imread(str(tmp_path / f"frame_{score['frame_id']}.jpg"))
+        heatmap = cv2.imread(str(tmp_path / f"heatmap_{score['frame_id']}.jpg"))
+        assert frame is not None and heatmap is not None
+        assert frame.shape == heatmap.shape
+        assert heatmap.max() > 0

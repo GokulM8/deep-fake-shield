@@ -25,7 +25,8 @@ class FaceCropper:
         cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
         self.detector = cv2.CascadeClassifier(cascade_path)
 
-    def crop(self, frame: np.ndarray) -> np.ndarray | None:
+    def locate(self, frame: np.ndarray) -> tuple[int, int, int, int] | None:
+        """Return the padded crop box of the largest face as (left, top, right, bottom)."""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = self.detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(32, 32))
         if len(faces) == 0:
@@ -34,6 +35,13 @@ class FaceCropper:
         pad_x, pad_y = int(width * self.margin), int(height * self.margin)
         top, bottom = max(0, y - pad_y), min(frame.shape[0], y + height + pad_y)
         left, right = max(0, x - pad_x), min(frame.shape[1], x + width + pad_x)
+        return int(left), int(top), int(right), int(bottom)
+
+    def crop(self, frame: np.ndarray) -> np.ndarray | None:
+        box = self.locate(frame)
+        if box is None:
+            return None
+        left, top, right, bottom = box
         return frame[top:bottom, left:right]
 
 

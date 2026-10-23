@@ -12,7 +12,7 @@ export function VideoPlayer({
   onDurationChange,
 }: {
   src?: string;
-  posterUrl: string;
+  posterUrl?: string;
   filename: string;
   duration: number;
   currentTime: number;
@@ -45,19 +45,32 @@ export function VideoPlayer({
             poster={posterUrl}
             muted={muted}
             playsInline
-            className="h-full w-full object-cover"
-            onLoadedMetadata={(event) => onDurationChange?.(event.currentTarget.duration)}
+            preload="metadata"
+            className="h-full w-full object-contain"
+            onLoadedMetadata={(event) => {
+              const video = event.currentTarget;
+              onDurationChange?.(video.duration);
+              // Safari does not paint the first frame until a seek happens.
+              if (video.currentTime === 0) video.currentTime = 0.001;
+            }}
             onTimeUpdate={(event) => onTimeChange(event.currentTarget.currentTime)}
             onPlay={() => setPlaying(true)}
             onPause={() => setPlaying(false)}
             onEnded={() => setPlaying(false)}
           />
-        ) : (
+        ) : posterUrl ? (
           <img
             src={posterUrl}
             alt={`Preview frame of ${filename}`}
             className="h-full w-full object-cover"
           />
+        ) : (
+          <div className="grid h-full w-full place-items-center px-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              Preview unavailable. The original file is not stored after analysis, so it can only be
+              shown in the tab that uploaded it.
+            </p>
+          </div>
         )}
         {playing ? (
           <div className="pointer-events-none absolute inset-0 overflow-hidden">

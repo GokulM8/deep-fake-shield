@@ -17,9 +17,15 @@ from app.services.video_detector import VideoDetector, VideoInferenceError
 class AnalysisService:
     """Coordinates analysis jobs while keeping inference replaceable."""
 
-    def __init__(self, repository: AnalysisRepository, video_detector: VideoDetector) -> None:
+    def __init__(
+        self,
+        repository: AnalysisRepository,
+        video_detector: VideoDetector,
+        artifact_root: Path | None = None,
+    ) -> None:
         self.repository = repository
         self.video_detector = video_detector
+        self.artifact_root = artifact_root
 
     def run(self, analysis_id: str, media_path: Path) -> None:
         record = self.repository.get(analysis_id)
@@ -28,7 +34,7 @@ class AnalysisService:
 
         try:
             if record.media_type == MediaType.VIDEO:
-                result = self._video_result(media_path)
+                result = self._video_result(analysis_id, media_path)
             else:
                 payload = media_path.read_bytes()
                 result = self._placeholder_result(record.media_type, payload)
@@ -50,8 +56,14 @@ class AnalysisService:
             )
             self.repository.update(failed)
 
-    def _video_result(self, media_path: Path) -> AnalysisResult:
-        prediction = self.video_detector.predict(media_path)
+    def _video_result(self, analysis_id: str, media_path: Path) -> AnalysisResult:
+        artifact_dir = self.artifact_root / analysis_id if self.artifact_root else None
+        prediction = self.video_detector.predict(media_path, artifact_dir=artifact_dir)
+        if artifact_dir is not None:
+            for item in prediction["frame_scores"]:
+                base = f"/api/v1/analyze/{analysis_id}/frames/{item['frame_id']}"
+                item["thumbnail_url"] = f"{base}/frame"
+                item["heatmap_url"] = f"{base}/heatmap"
         fake_probability = prediction["fake_probability"]
         real_probability = prediction["real_probability"]
         is_fake = prediction["prediction"] == "FAKE"
@@ -62,6 +74,11 @@ class AnalysisService:
             fake_probability=fake_probability,
             real_probability=real_probability,
             frames_analyzed=prediction["frames_analyzed"],
+            frame_scores=prediction["frame_scores"],
+            duration_seconds=prediction["duration_seconds"],
+            frame_rate=prediction["frame_rate"],
+            width=prediction["width"],
+            height=prediction["height"],
             signals=[
                 EvidenceSignal(
                     name="EfficientNet-B0 video model",

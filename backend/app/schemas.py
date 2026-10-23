@@ -35,12 +35,27 @@ class EvidenceSignal(BaseModel):
     explanation: str
 
 
+class FrameScore(BaseModel):
+    frame_id: int
+    timestamp: float | None = None
+    fake_probability: float = Field(ge=0, le=1)
+    # Padded face crop in source-video pixels: [left, top, right, bottom].
+    face_box: list[int] | None = None
+    thumbnail_url: str | None = None
+    heatmap_url: str | None = None
+
+
 class AnalysisResult(BaseModel):
     verdict: Verdict
     confidence: float = Field(ge=0, le=1)
     fake_probability: float | None = Field(default=None, ge=0, le=1)
     real_probability: float | None = Field(default=None, ge=0, le=1)
     frames_analyzed: int | None = Field(default=None, ge=0)
+    frame_scores: list[FrameScore] = Field(default_factory=list)
+    duration_seconds: float | None = Field(default=None, ge=0)
+    frame_rate: float | None = Field(default=None, ge=0)
+    width: int | None = Field(default=None, ge=0)
+    height: int | None = Field(default=None, ge=0)
     signals: list[EvidenceSignal]
     suspicious_regions: list[str] = Field(default_factory=list)
     suspicious_frames: list[float] = Field(default_factory=list)

@@ -5,11 +5,12 @@ import type {
   EvidenceSignal,
   MediaType,
   Severity,
+  SuspiciousFrame,
   Verdict,
 } from "./types";
 
 export const USING_MOCK_DATA = import.meta.env["VITE_USE_MOCK_DATA"] === "true";
-const uploadedVideoUrls = new Map<string, string>();
+const uploadedMediaUrls = new Map<string, string>();
 const API_BASE_URL = (import.meta.env["VITE_API_BASE_URL"] ?? "http://127.0.0.1:8000").replace(
   /\/$/,
   "",
@@ -27,8 +28,9 @@ export interface AnalyzeMediaResponse {
   status: Analysis["status"];
 }
 
-export function getUploadedVideoUrl(analysisId: string): string | undefined {
-  return uploadedVideoUrls.get(analysisId);
+/** Browser-local object URL for media uploaded in this tab; the backend does not keep the file. */
+export function getUploadedMediaUrl(analysisId: string): string | undefined {
+  return uploadedMediaUrls.get(analysisId);
 }
 
 interface BackendSignal {
@@ -42,6 +44,9 @@ interface BackendFrameScore {
   frame_id: number;
   timestamp?: number | null;
   fake_probability: number;
+  face_box?: [number, number, number, number] | null;
+  thumbnail_url?: string | null;
+  heatmap_url?: string | null;
 }
 
 interface BackendRecord {
@@ -80,6 +85,17 @@ function severity(level: string): Severity {
     : "UNKNOWN";
 }
 
+/** Same bands as the timeline colours. */
+function scoreSeverity(score: number): Severity {
+  if (score >= 75) return "HIGH";
+  if (score >= 45) return "MEDIUM";
+  return "LOW";
+}
+
+function backendUrl(path: string | null | undefined): string {
+  return path ? `${API_BASE_URL}${path}` : "";
+}
+
 function verdict(value: string): Verdict {
   return (
     (
@@ -102,23 +118,53 @@ function toAnalysis(record: BackendRecord): Analysis {
     score: Math.round(signal.score * 100),
     description: signal.explanation,
   }));
-  const suspiciousFrames = (result?.suspicious_frames ?? []).map((time, index) => ({
-    id: `${record.analysis_id}-frame-${index}`,
-    frame: index,
-    timestamp: `${time.toFixed(2)}s`,
-    time,
-    score: Math.round(
-      (result?.frame_scores?.find((frame) => frame.timestamp === time)?.fake_probability ?? 0) *
-        100,
-    ),
-    severity: "UNKNOWN" as Severity,
-    thumbnailUrl: "",
-    heatmapUrl: null,
-    suspiciousRegion: result?.suspicious_regions[index] ?? "Not provided",
-    modelAttention: "Not provided",
-    explanation:
-      "The backend reported a suspicious timestamp; frame-level evidence is not available yet.",
-  }));
+  const flaggedTimes = new Set(result?.suspicious_frames ?? []);
+  const suspiciousFrames = (result?.frame_scores ?? [])
+    .filter((frame) => frame.timestamp !== null && frame.timestamp !== undefined)
+    .map((frame): SuspiciousFrame => {
+      const time = frame.timestamp as number;
+      const score = Math.round(frame.fake_probability * 1000) / 10;
+      const flagged = flaggedTimes.has(time);
+      const [left, top, right, bottom] = frame.face_box ?? [];
+      const width = result?.width;
+      const height = result?.height;
+      const hasHeatmap = Boolean(frame.heatmap_url);
+      return {
+        id: `${record.analysis_id}-frame-${frame.frame_id}`,
+        frame: frame.frame_id,
+        timestamp: `${time.toFixed(2)}s`,
+        time,
+        score,
+        severity: scoreSeverity(score),
+        thumbnailUrl: backendUrl(frame.thumbnail_url),
+        heatmapUrl: backendUrl(frame.heatmap_url) || null,
+        ...(width && height ? { aspectRatio: width / height } : {}),
+        ...(left !== undefined &&
+        top !== undefined &&
+        right !== undefined &&
+        bottom !== undefined &&
+        width &&
+        height
+          ? {
+              faceBox: {
+                left: (left / width) * 100,
+                top: (top / height) * 100,
+                width: ((right - left) / width) * 100,
+                height: ((bottom - top) / height) * 100,
+              },
+            }
+          : {}),
+        flagged,
+        suspiciousRegion: flagged
+          ? (result?.suspicious_regions[0] ?? "Face region")
+          : "None flagged",
+        modelAttention: hasHeatmap ? "Grad-CAM, EfficientNet-B0 final conv block" : "Not provided",
+        explanation: `The detector gave the face in this frame a ${score.toFixed(1)}% fake probability${
+          flagged ? ", above the decision threshold" : ", below the decision threshold"
+        }.${hasHeatmap ? " Warmer heatmap areas pushed the score towards fake the most." : ""}`,
+      };
+    })
+    .sort((a, b) => b.score - a.score);
   const timeline = (result?.frame_scores ?? [])
     .filter((frame) => frame.timestamp !== null && frame.timestamp !== undefined)
     .map((frame) => ({
@@ -211,8 +257,8 @@ export async function analyzeMedia(input: AnalyzeMediaInput): Promise<AnalyzeMed
   });
   if (typeof window !== "undefined")
     window.sessionStorage.setItem(`dfs:submitted:${record.analysis_id}`, JSON.stringify(input));
-  if (input.file?.type.startsWith("video/")) {
-    uploadedVideoUrls.set(record.analysis_id, URL.createObjectURL(input.file));
+  if (input.file.type.startsWith("video/") || input.file.type.startsWith("image/")) {
+    uploadedMediaUrls.set(record.analysis_id, URL.createObjectURL(input.file));
   }
   return { analysisId: record.analysis_id, status: record.status };
 }
@@ -233,7 +279,7 @@ export async function getEvidence(id: string): Promise<EvidenceSignal[]> {
     `/api/v1/analyze/${encodeURIComponent(id)}/evidence`,
   );
   return signals.map((signal, index) => ({
-    id: index === 0 ? "visual" : "temporal",
+    id: index === 0 ? "visual" : index === 1 ? "compression" : "temporal",
     label: signal.name,
     severity: severity(signal.level),
     score: Math.round(signal.score * 100),

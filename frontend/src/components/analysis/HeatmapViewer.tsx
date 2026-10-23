@@ -1,4 +1,6 @@
 import { useState } from "react";
+import type { SuspiciousFrame } from "@/lib/types";
+import { FrameImage } from "./FramePreview";
 
 /**
  * Grad-CAM style visualisation.
@@ -7,25 +9,23 @@ import { useState } from "react";
  * generated overlay below is replaced automatically — no layout change needed.
  */
 export function HeatmapViewer({
-  frameUrl,
-  heatmapUrl,
+  frame,
   intensity: initialIntensity = 70,
 }: {
-  frameUrl: string;
-  heatmapUrl: string | null;
+  frame: SuspiciousFrame;
   intensity?: number;
 }) {
+  const { heatmapUrl } = frame;
   const [intensity, setIntensity] = useState(initialIntensity);
 
   return (
     <div className="space-y-3">
-      <div className="relative aspect-video overflow-hidden rounded-md border border-border bg-black">
-        <img
-          src={frameUrl}
-          alt="Analyzed frame"
-          loading="lazy"
-          className="h-full w-full object-cover opacity-70 grayscale"
-        />
+      <FrameImage
+        frame={frame}
+        alt="Analyzed frame"
+        className="rounded-md border border-border"
+        imageClassName="opacity-70 grayscale"
+      >
         {heatmapUrl ? (
           <img
             src={heatmapUrl}
@@ -53,9 +53,9 @@ export function HeatmapViewer({
         )}
         <div className="pointer-events-none absolute inset-0 grid-backdrop opacity-30" />
         <span className="absolute left-3 top-3 rounded-sm border border-border-strong bg-background/80 px-2 py-1 font-mono text-[10px] tracking-[0.14em] backdrop-blur">
-          GRAD-CAM · DEMO RENDER
+          {heatmapUrl ? "GRAD-CAM · EFFICIENTNET-B0" : "GRAD-CAM · DEMO RENDER"}
         </span>
-      </div>
+      </FrameImage>
 
       <label className="flex items-center gap-3">
         <span className="label-caps shrink-0">Overlay</span>

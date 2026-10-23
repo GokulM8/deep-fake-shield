@@ -58,10 +58,16 @@ export interface SuspiciousFrame {
   time: number;
   score: number;
   severity: Severity;
-  /** Replace with a real frame URL once the backend serves extracted frames. */
+  /** Extracted frame image; empty when the backend did not provide one. */
   thumbnailUrl: string;
-  /** Replace with the real Grad-CAM output URL from the backend. */
+  /** Grad-CAM overlay aligned to `thumbnailUrl`; null renders the demo visualisation. */
   heatmapUrl: string | null;
+  /** Frame width / height, so overlays line up with the image. */
+  aspectRatio?: number;
+  /** Detected face crop as percentages of the frame. */
+  faceBox?: { left: number; top: number; width: number; height: number };
+  /** Whether the detector flagged this frame; mock frames count as flagged. */
+  flagged?: boolean;
   suspiciousRegion: string;
   modelAttention: string;
   explanation: string;

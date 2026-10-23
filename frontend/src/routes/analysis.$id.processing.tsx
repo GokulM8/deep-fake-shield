@@ -3,7 +3,7 @@ import { Check, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import sampleFrame from "@/assets/sample-frame.jpg";
 import { IMAGE_PROCESSING_STAGES, PROCESSING_STAGES } from "@/lib/mockData";
-import { getAnalysis, USING_MOCK_DATA } from "@/lib/api";
+import { getAnalysis, getUploadedMediaUrl, USING_MOCK_DATA } from "@/lib/api";
 import { Panel } from "@/components/common/primitives";
 import { cn } from "@/lib/utils";
 
@@ -32,8 +32,10 @@ function ProcessingPage() {
     filename: string;
     mediaType: string;
   } | null>(null);
+  const [uploadedUrl, setUploadedUrl] = useState<string | undefined>(undefined);
 
   useEffect(() => {
+    setUploadedUrl(getUploadedMediaUrl(id));
     try {
       const raw = window.sessionStorage.getItem(`dfs:submitted:${id}`);
       if (raw) setSubmitted(JSON.parse(raw));
@@ -185,12 +187,29 @@ function ProcessingPage() {
 
         <Panel className="overflow-hidden p-0">
           <div className="relative aspect-video overflow-hidden bg-black">
-            <img
-              src={sampleFrame}
-              alt="Media under analysis"
-              loading="lazy"
-              className="h-full w-full object-cover opacity-70"
-            />
+            {uploadedUrl && !isImage ? (
+              <video
+                src={uploadedUrl}
+                muted
+                playsInline
+                preload="metadata"
+                className="h-full w-full object-contain opacity-70"
+                onLoadedMetadata={(event) => {
+                  if (event.currentTarget.currentTime === 0)
+                    event.currentTarget.currentTime = 0.001;
+                }}
+              />
+            ) : (
+              <img
+                src={uploadedUrl ?? sampleFrame}
+                alt="Media under analysis"
+                loading="lazy"
+                className={cn(
+                  "h-full w-full opacity-70",
+                  uploadedUrl ? "object-contain" : "object-cover",
+                )}
+              />
+            )}
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
               <div className="animate-scan h-12 w-full bg-gradient-to-b from-transparent via-primary/25 to-transparent" />
             </div>

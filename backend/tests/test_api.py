@@ -46,6 +46,18 @@ def test_upload_completes_and_returns_evidence() -> None:
     assert evidence.json()[0]["name"] == "Visual model"
 
 
+def test_analysis_history_returns_uploaded_records() -> None:
+    response = client.post(
+        "/api/v1/analyze",
+        files={"file": ("history.jpg", b"\xff\xd8\xff\xe0history-jpeg-payload", "image/jpeg")},
+    )
+    assert response.status_code == 202
+
+    history = client.get("/api/v1/analyze")
+    assert history.status_code == 200
+    assert history.json()[0]["analysis_id"] == response.json()["analysis_id"]
+
+
 def test_rejects_unsupported_extension() -> None:
     response = client.post(
         "/api/v1/analyze",
@@ -76,3 +88,21 @@ def test_real_video_upload_returns_model_result() -> None:
     assert body["result"]["frames_analyzed"] == 2
     assert body["result"]["fake_probability"] is not None
     assert body["result"]["real_probability"] is not None
+
+
+def test_video_frame_artifacts_are_served() -> None:
+    video_path = ROOT / "datasets/raw/test/00272.mp4"
+    with video_path.open("rb") as video:
+        response = client.post(
+            "/api/v1/analyze",
+            files={"file": (video_path.name, video, "video/mp4")},
+        )
+    analysis_id = response.json()["analysis_id"]
+    frame = client.get(f"/api/v1/analyze/{analysis_id}").json()["result"]["frame_scores"][0]
+    for url in (frame["thumbnail_url"], frame["heatmap_url"]):
+        image = client.get(url)
+        assert image.status_code == 200
+        assert image.headers["content-type"] == "image/jpeg"
+        assert image.content[:3] == b"\xff\xd8\xff"
+    assert client.get(f"/api/v1/analyze/{analysis_id}/frames/999999/frame").status_code == 404
+    assert client.get("/api/v1/analyze/DF-missing/frames/0/frame").status_code == 404

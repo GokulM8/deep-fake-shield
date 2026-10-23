@@ -23,6 +23,10 @@ class AnalysisRepository:
         with self._lock:
             return self._records.get(analysis_id)
 
+    def list(self) -> list[AnalysisRecord]:
+        with self._lock:
+            return sorted(self._records.values(), key=lambda record: record.created_at, reverse=True)
+
     def update(self, record: AnalysisRecord) -> AnalysisRecord:
         with self._lock:
             self._records[record.analysis_id] = record
