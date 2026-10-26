@@ -20,5 +20,6 @@ artifacts/timelines/
 
 # Colab hand-off archives (large; live on Drive, not in git).
 colab_bundle.zip
+colab_bundle_part*.zip
 results_bundle.zip
 *.zip.partial

@@ -12,6 +12,10 @@ The bundle root mirrors the repository, so the same scripts run unchanged in Col
     BUNDLE_MANIFEST.json
 
 macOS ``._*`` AppleDouble files, ``.DS_Store`` and ``__pycache__`` are never included.
+
+FAT32 drives cap files at 4 GiB, so videos spill into ``colab_bundle_part2.zip``,
+``colab_bundle_part3.zip``, ... once a part reaches ``--max-part-gib``. Every part unzips into the
+same root; the manifest (in the first part) lists them all.
 """
 
 from __future__ import annotations
@@ -89,6 +93,7 @@ def main() -> int:
     parser.add_argument("--video-root", type=Path, default=ROOT / "datasets/raw")
     parser.add_argument("--no-videos", action="store_true",
                         help="Leave videos out (point the notebook at a dataset copy already on Drive)")
+    parser.add_argument("--max-part-gib", type=float, default=3.5, help="Start a new part past this size (FAT32: < 4)")
     args = parser.parse_args()
 
     splits, videos = {}, []
@@ -106,39 +111,63 @@ def main() -> int:
         print(f"Missing bundle files: {absent}", file=sys.stderr)
         return 1
 
+    total_videos = 0 if args.no_videos else len(videos)
+    limit = int(args.max_part_gib * 1024**3)
+    queue = [] if args.no_videos else list(videos)
+    # Plan parts up front so the manifest in the first part can name them all.
+    parts: list[list[str]] = [[]]
+    used = sum((ROOT / path).stat().st_size for path in code) + sum(len(data) for data in splits.values())
+    for path in queue:
+        size = local_path(path, args.video_root).stat().st_size
+        if parts[-1] and used + size > limit:
+            parts.append([])
+            used = 0
+        parts[-1].append(path)
+        used += size
+    names = [args.output.name] + [f"{args.output.stem}_part{index}.zip" for index in range(2, len(parts) + 1)]
     manifest = {
         "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "git_commit": git_commit(),
         "videos_included": not args.no_videos,
         "videos": len(videos),
         "split_sizes": {split: data.count(b"\n") - 1 for split, data in splits.items()},
+        "parts": {name: len(chunk) for name, chunk in zip(names, parts)},
         "code_files": code,
     }
-    partial = args.output.with_suffix(".zip.partial")
-    total_videos = 0 if args.no_videos else len(videos)
-    with zipfile.ZipFile(partial, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as bundle:
-        for split, data in splits.items():
-            bundle.writestr(f"artifacts/splits/{split}.csv", data)
-        for path in code:
-            compression = zipfile.ZIP_STORED if Path(path).suffix in STORED_SUFFIXES else zipfile.ZIP_DEFLATED
-            bundle.write(ROOT / path, path, compress_type=compression)
-        if not args.no_videos:
-            for done, path in enumerate(videos, start=1):
+
+    written, done = [], 0
+    for index, (name, chunk) in enumerate(zip(names, parts)):
+        target = args.output.with_name(name)
+        partial = target.with_suffix(".zip.partial")
+        with zipfile.ZipFile(partial, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as bundle:
+            if index == 0:
+                for split, data in splits.items():
+                    bundle.writestr(f"artifacts/splits/{split}.csv", data)
+                for path in code:
+                    compression = zipfile.ZIP_STORED if Path(path).suffix in STORED_SUFFIXES else zipfile.ZIP_DEFLATED
+                    bundle.write(ROOT / path, path, compress_type=compression)
+                bundle.writestr("BUNDLE_MANIFEST.json", json.dumps(manifest, indent=2) + "\n")
+            for path in chunk:
                 bundle.write(local_path(path, args.video_root), path, compress_type=zipfile.ZIP_STORED)
+                done += 1
                 if done % 500 == 0 or done == total_videos:
                     print(f"videos {done}/{total_videos}", flush=True)
-        bundle.writestr("BUNDLE_MANIFEST.json", json.dumps(manifest, indent=2) + "\n")
-    partial.replace(args.output)
+        partial.replace(target)
+        with zipfile.ZipFile(target) as bundle:
+            entries = bundle.namelist()
+        leaked = [entry for entry in entries if excluded(Path(entry))]
+        if leaked:
+            print(f"Refusing to ship AppleDouble/system files: {leaked[:5]}", file=sys.stderr)
+            target.unlink()
+            return 1
+        written.append((target, len(entries)))
 
-    with zipfile.ZipFile(args.output) as bundle:
-        names = bundle.namelist()
-    leaked = [name for name in names if excluded(Path(name))]
-    if leaked:
-        print(f"Refusing to ship AppleDouble/system files: {leaked[:5]}", file=sys.stderr)
-        args.output.unlink()
-        return 1
-    size = args.output.stat().st_size
-    print(f"Wrote {args.output} ({size / 1024**3:.2f} GiB, {size:,} bytes): {len(names)} entries, "
+    total = 0
+    for target, entries in written:
+        size = target.stat().st_size
+        total += size
+        print(f"Wrote {target} ({size / 1024**3:.2f} GiB): {entries} entries")
+    print(f"Total {total / 1024**3:.2f} GiB ({total:,} bytes) in {len(written)} part(s): "
           f"{total_videos} videos, {len(code)} code/model files")
     return 0
 
