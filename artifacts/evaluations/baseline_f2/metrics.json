@@ -1,9 +1,9 @@
 {
   "run_name": "baseline_f2",
-  "created_at": "2026-10-26T12:45:24+00:00",
+  "created_at": "2026-10-26T13:04:16+00:00",
   "git": {
-    "commit": "236785b457402c6c8473392f41db1ce71e6b4429",
-    "dirty": true
+    "commit": "308ead1f3572dda6b66741767f6246c8d04287cb",
+    "dirty": false
   },
   "checkpoint": "models/deepfake_shield_video_v1.pt",
   "checkpoint_sha256": "646618db85ac00aa1965f55d87480228b6b1df16dabcd6aa73c5400e5268f0c1",
