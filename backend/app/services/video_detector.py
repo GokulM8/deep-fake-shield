@@ -47,6 +47,66 @@ class SampledFaces:
     frame_indices: list[int]
     frames: list[np.ndarray]
     boxes: list[tuple[int, int, int, int]]
+    # Position of each kept frame among the ``frames`` evenly spaced samples, so callers can
+    # build a fixed-length sequence with a no-face mask.
+    slots: list[int]
+
+
+def build_transform() -> transforms.Compose:
+    """Face-crop preprocessing shared by serving, evaluation and embedding extraction."""
+    return transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    ])
+
+
+def sample_faces(video_path: Path, frames: int, cropper: FaceCropper, transform: Any) -> SampledFaces:
+    """Read ``frames`` evenly spaced frames and keep the largest padded face crop of each.
+
+    Frames that fail to decode or have no detectable face are skipped. Raises
+    ``VideoInferenceError`` when the video cannot be opened or reports no frames."""
+    capture = cv2.VideoCapture(str(video_path))
+    if not capture.isOpened():
+        capture.release()
+        raise VideoInferenceError("Uploaded video cannot be opened")
+
+    frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    fps = float(capture.get(cv2.CAP_PROP_FPS) or 0)
+    width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+    height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+    if frame_count <= 0:
+        capture.release()
+        raise VideoInferenceError("Uploaded video contains no readable frames")
+
+    sampled = SampledFaces(frame_count, fps, width, height, [], [], [], [], [])
+    for slot, frame_index in enumerate(sample_frame_indices(frame_count, frames)):
+        capture.set(cv2.CAP_PROP_POS_FRAMES, int(frame_index))
+        ok, frame = capture.read()
+        if not ok:
+            continue
+        box = cropper.locate(frame)
+        if box is None:
+            continue
+        left, top, right, bottom = box
+        rgb = cv2.cvtColor(frame[top:bottom, left:right], cv2.COLOR_BGR2RGB)
+        sampled.images.append(transform(Image.fromarray(rgb)))
+        sampled.frame_indices.append(int(frame_index))
+        sampled.frames.append(frame)
+        sampled.boxes.append(box)
+        sampled.slots.append(slot)
+    capture.release()
+    return sampled
+
+
+def embed_and_score(model: torch.nn.Module, batch: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Pooled EfficientNet-B0 embeddings ([N, 1280]) and fake probabilities ([N]) for face crops.
+
+    Mirrors ``EfficientNet.forward`` (features -> avgpool -> flatten -> classifier), so the
+    probabilities equal ``softmax(model(batch))[:, 1]``."""
+    embeddings = torch.flatten(model.avgpool(model.features(batch)), 1)
+    logits = model.classifier(embeddings)
+    return embeddings, torch.softmax(logits.float(), dim=1)[:, 1]
 
 
 class VideoDetector:
@@ -67,11 +127,7 @@ class VideoDetector:
         if self.frames < 1:
             raise ValueError(f"Frames per video must be at least 1, got {self.frames}")
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.transform = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ])
+        self.transform = build_transform()
         self.cropper = FaceCropper()
         # The Grad-CAM hook lives on the shared model and the Haar cascade is not thread-safe,
         # so concurrent analyses must not interleave.
@@ -117,37 +173,7 @@ class VideoDetector:
         if self.load_error is not None or self.model is None:
             detail = str(self.load_error) if self.load_error else "Model is not loaded"
             raise VideoInferenceError(f"Model loading failed: {detail}")
-
-        capture = cv2.VideoCapture(str(video_path))
-        if not capture.isOpened():
-            capture.release()
-            raise VideoInferenceError("Uploaded video cannot be opened")
-
-        frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-        fps = float(capture.get(cv2.CAP_PROP_FPS) or 0)
-        width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
-        height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
-        if frame_count <= 0:
-            capture.release()
-            raise VideoInferenceError("Uploaded video contains no readable frames")
-
-        sampled = SampledFaces(frame_count, fps, width, height, [], [], [], [])
-        for frame_index in sample_frame_indices(frame_count, self.frames):
-            capture.set(cv2.CAP_PROP_POS_FRAMES, int(frame_index))
-            ok, frame = capture.read()
-            if not ok:
-                continue
-            box = self.cropper.locate(frame)
-            if box is None:
-                continue
-            left, top, right, bottom = box
-            rgb = cv2.cvtColor(frame[top:bottom, left:right], cv2.COLOR_BGR2RGB)
-            sampled.images.append(self.transform(Image.fromarray(rgb)))
-            sampled.frame_indices.append(int(frame_index))
-            sampled.frames.append(frame)
-            sampled.boxes.append(box)
-        capture.release()
-        return sampled
+        return sample_faces(video_path, self.frames, self.cropper, self.transform)
 
     def _predict(self, video_path: Path, artifact_dir: Path | None) -> dict[str, Any]:
         sampled = self._sample_faces(video_path)

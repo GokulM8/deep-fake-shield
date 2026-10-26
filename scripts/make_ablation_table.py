@@ -12,6 +12,16 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+# Runs listed first, in this order; anything else follows alphabetically.
+RUN_ORDER = [
+    "baseline_f2",
+    "baseline_f16",
+    "baseline_f16_mean",
+    "baseline_f16_median",
+    "baseline_f16_top3",
+    "baseline_f16_max",
+    "temporal_f16",
+]
 COLUMNS = ["Run", "Frames", "Threshold", "Accuracy", "Balanced acc.", "Real recall", "Fake recall", "F1", "ROC-AUC", "PR-AUC"]
 
 
@@ -48,7 +58,11 @@ def main() -> int:
     output = args.output or args.evaluations_dir / "ablation_table.md"
 
     rows, notes = [], []
-    for path in sorted(args.evaluations_dir.glob("*/metrics.json")):
+    def order(path: Path) -> tuple[int, str]:
+        name = path.parent.name
+        return (RUN_ORDER.index(name) if name in RUN_ORDER else len(RUN_ORDER), name)
+
+    for path in sorted(args.evaluations_dir.glob("*/metrics.json"), key=order):
         metrics = json.loads(path.read_text(encoding="utf-8"))
         rows.extend(rows_for(metrics, path.parent.name))
         test_split = metrics.get("splits", {}).get("test", {})

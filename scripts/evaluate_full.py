@@ -42,6 +42,7 @@ from sklearn.metrics import (  # noqa: E402
 SPLITS = ("val", "test")
 CACHE_FIELDS = ["video_path", "label", "fake_prob", "n_valid_frames", "error"]
 DEFAULT_THRESHOLD = 0.5
+PREPROCESSING = "backend VideoDetector: linspace frame sampling, Haar face crop (20% margin), 224x224, ImageNet norm"
 
 
 def parse_args() -> argparse.Namespace:
@@ -328,20 +329,36 @@ def main() -> int:
             np.array([float(item["fake_prob"]) for item in evaluated]),
         )
 
+    write_evaluation(args.out_dir, summaries, arrays, {
+        **run_config,
+        "model": "efficientnet_b0",
+        "aggregation": "mean fake probability over frames with a detected face",
+        "preprocessing": PREPROCESSING,
+        "device": str(device),
+        "limit": args.limit or None,
+    })
+    return 0
+
+
+def write_evaluation(
+    out_dir: Path,
+    summaries: dict[str, dict[str, Any]],
+    arrays: dict[str, tuple[np.ndarray, np.ndarray]],
+    run_info: dict[str, Any],
+) -> dict[str, Any]:
+    """Tune the threshold on val, score val and test at 0.5 and tuned, and write metrics.json + plots.
+
+    ``arrays`` maps each split to (labels, video fake scores) for the evaluated videos only; any
+    scorer (frame mean, other aggregations, the temporal model) reports through this one schema."""
     tuned, best_j = youden_threshold(*arrays["val"])
     thresholds = {"0.5": DEFAULT_THRESHOLD, "tuned": tuned}
     results = {split: evaluate_scores(*arrays[split], thresholds) for split in SPLITS}
 
     metrics = {
-        "run_name": args.out_dir.name,
+        "run_name": out_dir.name,
         "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "git": git_state(),
-        **run_config,
-        "model": "efficientnet_b0",
-        "aggregation": "mean fake probability over frames with a detected face",
-        "preprocessing": "backend VideoDetector: linspace frame sampling, Haar face crop (20% margin), 224x224, ImageNet norm",
-        "device": str(device),
-        "limit": args.limit or None,
+        **run_info,
         "thresholds": thresholds,
         "threshold_selection": {"method": "youden_j", "split": "val", "value": tuned, "val_youden_j": best_j},
         "splits": summaries,
@@ -349,12 +366,12 @@ def main() -> int:
         "val": results["val"],
         "test": results["test"],
     }
-    (args.out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
-    plot_curves(args.out_dir, arrays, results["test"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
+    plot_curves(out_dir, arrays, results["test"])
     print_summary(metrics)
-    print(f"\nWrote {args.out_dir / 'metrics.json'} and plots")
-    return 0
-
+    print(f"\nWrote {out_dir / 'metrics.json'} and plots")
+    return metrics
 
 if __name__ == "__main__":
     raise SystemExit(main())

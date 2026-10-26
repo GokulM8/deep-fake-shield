@@ -17,3 +17,8 @@ artifacts/evaluation/
 artifacts/experiments/
 artifacts/timelines/
 ._*
+
+# Colab hand-off archives (large; live on Drive, not in git).
+colab_bundle.zip
+results_bundle.zip
+*.zip.partial
