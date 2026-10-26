@@ -105,7 +105,9 @@ def git_state() -> dict[str, Any]:
         return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
     try:
-        return {"commit": git("rev-parse", "HEAD"), "dirty": bool(git("status", "--porcelain", "--untracked-files=no"))}
+        # Evaluation outputs are not code, so rewriting them does not make the run dirty.
+        changed = git("status", "--porcelain", "--untracked-files=no", "--", ".", ":(exclude)artifacts/evaluations")
+        return {"commit": git("rev-parse", "HEAD"), "dirty": bool(changed)}
     except (OSError, subprocess.CalledProcessError):
         return {"commit": None, "dirty": None}
 
