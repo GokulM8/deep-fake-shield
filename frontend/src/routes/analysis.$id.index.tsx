@@ -207,7 +207,8 @@ function AnalysisDashboard() {
             </p>
             <div className="mt-5 border-t border-border pt-4">
               <p className="label-caps">Sampled frame scores</p>
-              <div className="mt-3 space-y-2">
+              {/* Up to 16 sampled frames: scroll instead of stretching the video viewer beside it. */}
+              <div className="mt-3 max-h-48 space-y-2 overflow-y-auto pr-1">
                 {analysis.timeline.map((point) => (
                   <button
                     key={point.frame}

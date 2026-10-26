@@ -23,8 +23,10 @@ if str(ML_ROOT) not in sys.path:
 from data.video_dataset import FaceCropper, sample_frame_indices  # noqa: E402
 from models.efficientnet_baseline import build_model  # noqa: E402
 
-DEFAULT_THRESHOLD = 0.5
-DEFAULT_FRAMES = 2
+# 16 frames at the val-tuned threshold (artifacts/evaluations/baseline_f16) beat 2 frames on every
+# test metric, and cost ~3.9 s per video with Grad-CAM on CPU (Apple M4).
+DEFAULT_THRESHOLD = 0.3654
+DEFAULT_FRAMES = 16
 MODEL_FILENAME = "deepfake_shield_video_v1.pt"
 ARTIFACT_MAX_WIDTH = 640
 
@@ -51,15 +53,19 @@ class VideoDetector:
     def __init__(
         self,
         model_path: Path | None = None,
-        threshold: float = DEFAULT_THRESHOLD,
-        frames: int = DEFAULT_FRAMES,
+        threshold: float | None = None,
+        frames: int | None = None,
         device: torch.device | None = None,
     ) -> None:
         self.model_path = model_path or Path(
             os.getenv("DEEPFAKE_MODEL_PATH", str(PROJECT_ROOT / "models" / MODEL_FILENAME))
         )
-        self.threshold = threshold
-        self.frames = frames
+        self.threshold = threshold if threshold is not None else _env_float("DEEPFAKE_THRESHOLD", DEFAULT_THRESHOLD)
+        self.frames = frames if frames is not None else _env_int("DEEPFAKE_FRAMES", DEFAULT_FRAMES)
+        if not 0 < self.threshold < 1:
+            raise ValueError(f"Decision threshold must be between 0 and 1, got {self.threshold}")
+        if self.frames < 1:
+            raise ValueError(f"Frames per video must be at least 1, got {self.frames}")
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.transform = transforms.Compose([
             transforms.Resize((224, 224)),
@@ -205,6 +211,22 @@ class VideoDetector:
         peaks = cams.flatten(1).amax(dim=1).clamp_min(1e-8)[:, None, None]
         probabilities = torch.softmax(logits, dim=1)[:, 1].detach().cpu().tolist()
         return probabilities, (cams / peaks).detach().cpu().numpy()
+
+
+def _env_float(name: str, default: float) -> float:
+    value = os.getenv(name)
+    try:
+        return float(value) if value else default
+    except ValueError:
+        raise ValueError(f"{name} must be a number, got {value!r}") from None
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name)
+    try:
+        return int(value) if value else default
+    except ValueError:
+        raise ValueError(f"{name} must be an integer, got {value!r}") from None
 
 
 def _write_frame_artifacts(

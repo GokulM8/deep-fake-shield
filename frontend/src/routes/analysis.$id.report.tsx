@@ -3,6 +3,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { ArrowLeft, Printer, ShieldHalf } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { analysisQuery, USING_MOCK_DATA } from "@/lib/api";
+import { SEVERITY_COLOR, frameSeverity } from "@/lib/severity";
 import { MockBanner } from "@/components/common/MockBanner";
 import { KeyValue, MetricBar, SeverityBadge } from "@/components/common/primitives";
 
@@ -208,12 +209,7 @@ function ReportPage() {
                 className="flex-1 rounded-sm"
                 style={{
                   height: `${Math.max(6, p.score)}%`,
-                  background:
-                    p.score >= 75
-                      ? "var(--severity-high)"
-                      : p.score >= 45
-                        ? "var(--severity-medium)"
-                        : "var(--severity-low)",
+                  background: SEVERITY_COLOR[frameSeverity(p.score, p.flagged)],
                 }}
               />
             ))}

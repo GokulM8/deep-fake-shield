@@ -86,7 +86,8 @@ def test_real_video_upload_returns_model_result() -> None:
     result = client.get(f"/api/v1/analyze/{response.json()['analysis_id']}")
     body = result.json()
     assert body["status"] == "completed"
-    assert body["result"]["frames_analyzed"] == 2
+    assert 1 <= body["result"]["frames_analyzed"] <= main.video_detector.frames
+    assert len(body["result"]["frame_scores"]) == body["result"]["frames_analyzed"]
     assert body["result"]["fake_probability"] is not None
     assert body["result"]["real_probability"] is not None
 

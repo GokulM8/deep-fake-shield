@@ -34,11 +34,34 @@ def test_face_extraction_matches_training_preprocessing() -> None:
 
 
 def test_real_video_inference_returns_expected_contract() -> None:
-    result = VideoDetector().predict(SAMPLE_VIDEO)
+    detector = VideoDetector()
+    result = detector.predict(SAMPLE_VIDEO)
     assert result["prediction"] in {"REAL", "FAKE"}
     assert 0 <= result["confidence"] <= 1
     assert 0 <= result["fake_probability"] <= 1
-    assert result["frames_analyzed"] == 2
+    assert 1 <= result["frames_analyzed"] <= detector.frames
+    assert (result["prediction"] == "FAKE") == (result["fake_probability"] >= detector.threshold)
+
+
+def test_serving_defaults_to_16_frames_at_tuned_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DEEPFAKE_FRAMES", raising=False)
+    monkeypatch.delenv("DEEPFAKE_THRESHOLD", raising=False)
+    detector = VideoDetector()
+    assert (detector.frames, detector.threshold) == (16, 0.3654)
+
+
+def test_frames_and_threshold_come_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DEEPFAKE_FRAMES", "2")
+    monkeypatch.setenv("DEEPFAKE_THRESHOLD", "0.2431")
+    detector = VideoDetector()
+    assert (detector.frames, detector.threshold) == (2, 0.2431)
+
+
+@pytest.mark.parametrize(("name", "value"), [("DEEPFAKE_FRAMES", "0"), ("DEEPFAKE_FRAMES", "two"), ("DEEPFAKE_THRESHOLD", "1.5")])
+def test_invalid_serving_config_is_rejected(monkeypatch: pytest.MonkeyPatch, name: str, value: str) -> None:
+    monkeypatch.setenv(name, value)
+    with pytest.raises(ValueError, match=r"DEEPFAKE_FRAMES|threshold|Frames"):
+        VideoDetector()
 
 
 def test_video_without_detectable_face_fails_cleanly(tmp_path: Path) -> None:
@@ -81,4 +104,5 @@ def test_concurrent_predictions_are_safe_and_identical(tmp_path: Path) -> None:
 def test_score_frames_matches_served_frame_scores() -> None:
     detector = VideoDetector()
     served = [score["fake_probability"] for score in detector.predict(SAMPLE_VIDEO)["frame_scores"]]
-    assert detector.score_frames(SAMPLE_VIDEO) == pytest.approx(served, abs=1e-6)
+    # Served scores are rounded to 6 decimals and the Grad-CAM pass differs from no_grad at float32 noise.
+    assert detector.score_frames(SAMPLE_VIDEO) == pytest.approx(served, abs=1e-5)

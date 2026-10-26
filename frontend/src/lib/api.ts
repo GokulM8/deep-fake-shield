@@ -8,6 +8,7 @@ import type {
   SuspiciousFrame,
   Verdict,
 } from "./types";
+import { frameSeverity } from "./severity";
 
 export const USING_MOCK_DATA = import.meta.env["VITE_USE_MOCK_DATA"] === "true";
 const uploadedMediaUrls = new Map<string, string>();
@@ -86,12 +87,6 @@ function severity(level: string): Severity {
 }
 
 /** Same bands as the timeline colours. */
-function scoreSeverity(score: number): Severity {
-  if (score >= 75) return "HIGH";
-  if (score >= 45) return "MEDIUM";
-  return "LOW";
-}
-
 function backendUrl(path: string | null | undefined): string {
   return path ? `${API_BASE_URL}${path}` : "";
 }
@@ -135,7 +130,7 @@ function toAnalysis(record: BackendRecord): Analysis {
         timestamp: `${time.toFixed(2)}s`,
         time,
         score,
-        severity: scoreSeverity(score),
+        severity: frameSeverity(score, flagged),
         thumbnailUrl: backendUrl(frame.thumbnail_url),
         heatmapUrl: backendUrl(frame.heatmap_url) || null,
         ...(width && height ? { aspectRatio: width / height } : {}),
@@ -171,6 +166,7 @@ function toAnalysis(record: BackendRecord): Analysis {
       time: frame.timestamp as number,
       frame: frame.frame_id,
       score: Math.round(frame.fake_probability * 100),
+      flagged: flaggedTimes.has(frame.timestamp as number),
     }));
   return {
     id: record.analysis_id,

@@ -101,7 +101,8 @@ class AnalysisService:
                     score=fake_probability,
                     level="high" if is_fake else "low",
                     explanation=(
-                        "Mean fake probability across detected faces in two sampled frames; "
+                        f"Mean fake probability across detected faces in {self.video_detector.frames} sampled frames, "
+                        f"flagged at {self.video_detector.threshold:g} or above; "
                         "this score is a model probability, not calibrated certainty."
                     ),
                 ),

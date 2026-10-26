@@ -49,6 +49,8 @@ export interface TimelinePoint {
   frame: number;
   /** Manipulation probability, 0–100. */
   score: number;
+  /** At or above the backend's decision threshold; absent in mock data. */
+  flagged?: boolean;
 }
 
 export interface SuspiciousFrame {

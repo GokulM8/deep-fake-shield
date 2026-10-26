@@ -1,12 +1,7 @@
 import { useState } from "react";
 import type { TimelinePoint } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-function toneFor(score: number) {
-  if (score >= 75) return "var(--severity-high)";
-  if (score >= 45) return "var(--severity-medium)";
-  return "var(--severity-low)";
-}
+import { SEVERITY_COLOR, formatClock, frameSeverity } from "@/lib/severity";
 
 export function VideoTimeline({
   timeline,
@@ -35,7 +30,7 @@ export function VideoTimeline({
               <span className="text-foreground">{hovered.score}%</span> · frame {hovered.frame}
             </>
           ) : (
-            <>00:00 → 00:{String(Math.round(duration)).padStart(2, "0")}</>
+            <>00:00 → {formatClock(duration)}</>
           )}
         </div>
       </div>
@@ -58,7 +53,7 @@ export function VideoTimeline({
               )}
               style={{
                 height: `${Math.max(6, point.score)}%`,
-                background: toneFor(point.score),
+                background: SEVERITY_COLOR[frameSeverity(point.score, point.flagged)],
                 boxShadow: active ? "0 0 0 1px var(--foreground)" : undefined,
               }}
             />
@@ -72,8 +67,8 @@ export function VideoTimeline({
 
       <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-muted-foreground">
         <span>00:00</span>
-        <span>00:06</span>
-        <span>00:12</span>
+        <span>{formatClock(duration / 2)}</span>
+        <span>{formatClock(duration)}</span>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
