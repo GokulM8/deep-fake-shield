@@ -1,0 +1,151 @@
+{
+  "run_name": "baseline_f16",
+  "created_at": "2026-10-26T12:54:34+00:00",
+  "git": {
+    "commit": "236785b457402c6c8473392f41db1ce71e6b4429",
+    "dirty": true
+  },
+  "checkpoint": "models/deepfake_shield_video_v1.pt",
+  "checkpoint_sha256": "646618db85ac00aa1965f55d87480228b6b1df16dabcd6aa73c5400e5268f0c1",
+  "frames": 16,
+  "model": "efficientnet_b0",
+  "aggregation": "mean fake probability over frames with a detected face",
+  "preprocessing": "backend VideoDetector: linspace frame sampling, Haar face crop (20% margin), 224x224, ImageNet norm",
+  "device": "mps",
+  "limit": null,
+  "thresholds": {
+    "0.5": 0.5,
+    "tuned": 0.36535
+  },
+  "threshold_selection": {
+    "method": "youden_j",
+    "split": "val",
+    "value": 0.36535,
+    "val_youden_j": 0.645800270381473
+  },
+  "splits": {
+    "val": {
+      "csv": "artifacts/splits/val.csv",
+      "total": 902,
+      "class_counts": {
+        "real": 107,
+        "fake": 795
+      },
+      "evaluated": 902,
+      "evaluated_class_counts": {
+        "real": 107,
+        "fake": 795
+      },
+      "skipped_no_face": 0,
+      "skipped_no_face_class_counts": {
+        "real": 0,
+        "fake": 0
+      },
+      "skipped_errors": 0,
+      "mean_valid_frames": 15.798226164079823,
+      "videos_with_partial_faces": 95
+    },
+    "test": {
+      "csv": "artifacts/splits/test.csv",
+      "total": 902,
+      "class_counts": {
+        "real": 107,
+        "fake": 795
+      },
+      "evaluated": 902,
+      "evaluated_class_counts": {
+        "real": 107,
+        "fake": 795
+      },
+      "skipped_no_face": 0,
+      "skipped_no_face_class_counts": {
+        "real": 0,
+        "fake": 0
+      },
+      "skipped_errors": 0,
+      "mean_valid_frames": 15.786031042128602,
+      "videos_with_partial_faces": 89
+    }
+  },
+  "skipped_videos": 0,
+  "val": {
+    "roc_auc": 0.8738023864103922,
+    "pr_auc": 0.9775478355891108,
+    "at_threshold": {
+      "0.5": {
+        "threshold": 0.5,
+        "accuracy": 0.6784922394678492,
+        "balanced_accuracy": 0.7893022982425204,
+        "precision": 0.9865125240847784,
+        "recall": 0.6440251572327044,
+        "f1": 0.7792998477929984,
+        "specificity": 0.9345794392523364,
+        "real_recall": 0.9345794392523364,
+        "fake_recall": 0.6440251572327044,
+        "confusion_matrix": {
+          "tn": 100,
+          "fp": 7,
+          "fn": 283,
+          "tp": 512
+        }
+      },
+      "tuned": {
+        "threshold": 0.36535,
+        "accuracy": 0.7804878048780488,
+        "balanced_accuracy": 0.8229001351907366,
+        "precision": 0.9791332263242376,
+        "recall": 0.7672955974842768,
+        "f1": 0.8603667136812412,
+        "specificity": 0.8785046728971962,
+        "real_recall": 0.8785046728971962,
+        "fake_recall": 0.7672955974842768,
+        "confusion_matrix": {
+          "tn": 94,
+          "fp": 13,
+          "fn": 185,
+          "tp": 610
+        }
+      }
+    }
+  },
+  "test": {
+    "roc_auc": 0.8813025333568447,
+    "pr_auc": 0.9788658128909333,
+    "at_threshold": {
+      "0.5": {
+        "threshold": 0.5,
+        "accuracy": 0.6341463414634146,
+        "balanced_accuracy": 0.7601010991594663,
+        "precision": 0.9833679833679834,
+        "recall": 0.5949685534591195,
+        "f1": 0.7413793103448275,
+        "specificity": 0.9252336448598131,
+        "real_recall": 0.9252336448598131,
+        "fake_recall": 0.5949685534591195,
+        "confusion_matrix": {
+          "tn": 99,
+          "fp": 8,
+          "fn": 322,
+          "tp": 473
+        }
+      },
+      "tuned": {
+        "threshold": 0.36535,
+        "accuracy": 0.7427937915742794,
+        "balanced_accuracy": 0.7974725210133427,
+        "precision": 0.9763113367174281,
+        "recall": 0.7257861635220125,
+        "f1": 0.8326118326118326,
+        "specificity": 0.8691588785046729,
+        "real_recall": 0.8691588785046729,
+        "fake_recall": 0.7257861635220125,
+        "confusion_matrix": {
+          "tn": 93,
+          "fp": 14,
+          "fn": 218,
+          "tp": 577
+        }
+      }
+    }
+  }
+}

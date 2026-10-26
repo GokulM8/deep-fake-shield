@@ -1,0 +1,5 @@
+{
+  "checkpoint": "models/deepfake_shield_video_v1.pt",
+  "checkpoint_sha256": "646618db85ac00aa1965f55d87480228b6b1df16dabcd6aa73c5400e5268f0c1",
+  "frames": 2
+}

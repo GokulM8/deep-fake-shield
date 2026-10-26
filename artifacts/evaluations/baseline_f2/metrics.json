@@ -1,0 +1,151 @@
+{
+  "run_name": "baseline_f2",
+  "created_at": "2026-10-26T12:45:24+00:00",
+  "git": {
+    "commit": "236785b457402c6c8473392f41db1ce71e6b4429",
+    "dirty": true
+  },
+  "checkpoint": "models/deepfake_shield_video_v1.pt",
+  "checkpoint_sha256": "646618db85ac00aa1965f55d87480228b6b1df16dabcd6aa73c5400e5268f0c1",
+  "frames": 2,
+  "model": "efficientnet_b0",
+  "aggregation": "mean fake probability over frames with a detected face",
+  "preprocessing": "backend VideoDetector: linspace frame sampling, Haar face crop (20% margin), 224x224, ImageNet norm",
+  "device": "mps",
+  "limit": null,
+  "thresholds": {
+    "0.5": 0.5,
+    "tuned": 0.243098
+  },
+  "threshold_selection": {
+    "method": "youden_j",
+    "split": "val",
+    "value": 0.243098,
+    "val_youden_j": 0.4998808843148466
+  },
+  "splits": {
+    "val": {
+      "csv": "artifacts/splits/val.csv",
+      "total": 902,
+      "class_counts": {
+        "real": 107,
+        "fake": 795
+      },
+      "evaluated": 898,
+      "evaluated_class_counts": {
+        "real": 106,
+        "fake": 792
+      },
+      "skipped_no_face": 4,
+      "skipped_no_face_class_counts": {
+        "real": 1,
+        "fake": 3
+      },
+      "skipped_errors": 0,
+      "mean_valid_frames": 1.957683741648107,
+      "videos_with_partial_faces": 38
+    },
+    "test": {
+      "csv": "artifacts/splits/test.csv",
+      "total": 902,
+      "class_counts": {
+        "real": 107,
+        "fake": 795
+      },
+      "evaluated": 900,
+      "evaluated_class_counts": {
+        "real": 107,
+        "fake": 793
+      },
+      "skipped_no_face": 2,
+      "skipped_no_face_class_counts": {
+        "real": 0,
+        "fake": 2
+      },
+      "skipped_errors": 0,
+      "mean_valid_frames": 1.96,
+      "videos_with_partial_faces": 36
+    }
+  },
+  "skipped_videos": 6,
+  "val": {
+    "roc_auc": 0.8230060034305318,
+    "pr_auc": 0.9673776077857921,
+    "at_threshold": {
+      "0.5": {
+        "threshold": 0.5,
+        "accuracy": 0.6080178173719376,
+        "balanced_accuracy": 0.7246640937678674,
+        "precision": 0.9721030042918455,
+        "recall": 0.571969696969697,
+        "f1": 0.7201907790143085,
+        "specificity": 0.8773584905660378,
+        "real_recall": 0.8773584905660378,
+        "fake_recall": 0.571969696969697,
+        "confusion_matrix": {
+          "tn": 93,
+          "fp": 13,
+          "fn": 339,
+          "tp": 453
+        }
+      },
+      "tuned": {
+        "threshold": 0.243098,
+        "accuracy": 0.7895322939866369,
+        "balanced_accuracy": 0.7499404421574233,
+        "precision": 0.952023988005997,
+        "recall": 0.8017676767676768,
+        "f1": 0.8704592186429061,
+        "specificity": 0.6981132075471698,
+        "real_recall": 0.6981132075471698,
+        "fake_recall": 0.8017676767676768,
+        "confusion_matrix": {
+          "tn": 74,
+          "fp": 32,
+          "fn": 157,
+          "tp": 635
+        }
+      }
+    }
+  },
+  "test": {
+    "roc_auc": 0.8316932033800427,
+    "pr_auc": 0.9667824049697455,
+    "at_threshold": {
+      "0.5": {
+        "threshold": 0.5,
+        "accuracy": 0.5611111111111111,
+        "balanced_accuracy": 0.702437213468315,
+        "precision": 0.9715639810426541,
+        "recall": 0.5170239596469105,
+        "f1": 0.6748971193415638,
+        "specificity": 0.8878504672897196,
+        "real_recall": 0.8878504672897196,
+        "fake_recall": 0.5170239596469105,
+        "confusion_matrix": {
+          "tn": 95,
+          "fp": 12,
+          "fn": 383,
+          "tp": 410
+        }
+      },
+      "tuned": {
+        "threshold": 0.243098,
+        "accuracy": 0.7644444444444445,
+        "balanced_accuracy": 0.765270886613004,
+        "precision": 0.9603803486529319,
+        "recall": 0.7641866330390921,
+        "f1": 0.851123595505618,
+        "specificity": 0.7663551401869159,
+        "real_recall": 0.7663551401869159,
+        "fake_recall": 0.7641866330390921,
+        "confusion_matrix": {
+          "tn": 82,
+          "fp": 25,
+          "fn": 187,
+          "tp": 606
+        }
+      }
+    }
+  }
+}
