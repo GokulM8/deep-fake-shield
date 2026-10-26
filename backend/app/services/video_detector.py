@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -31,25 +33,43 @@ class VideoInferenceError(RuntimeError):
     """Raised when a video cannot be analyzed by the trained detector."""
 
 
+@dataclass
+class SampledFaces:
+    """Face crops from evenly sampled frames, plus the video metadata read alongside them."""
+
+    frame_count: int
+    fps: float
+    width: int
+    height: int
+    images: list[torch.Tensor]
+    frame_indices: list[int]
+    frames: list[np.ndarray]
+    boxes: list[tuple[int, int, int, int]]
+
+
 class VideoDetector:
     def __init__(
         self,
         model_path: Path | None = None,
         threshold: float = DEFAULT_THRESHOLD,
         frames: int = DEFAULT_FRAMES,
+        device: torch.device | None = None,
     ) -> None:
         self.model_path = model_path or Path(
             os.getenv("DEEPFAKE_MODEL_PATH", str(PROJECT_ROOT / "models" / MODEL_FILENAME))
         )
         self.threshold = threshold
         self.frames = frames
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.transform = transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
         ])
         self.cropper = FaceCropper()
+        # The Grad-CAM hook lives on the shared model and the Haar cascade is not thread-safe,
+        # so concurrent analyses must not interleave.
+        self._lock = threading.Lock()
         self.model: torch.nn.Module | None = None
         self.load_error: Exception | None = None
         try:
@@ -70,6 +90,24 @@ class VideoDetector:
     def predict(self, video_path: Path, artifact_dir: Path | None = None) -> dict[str, Any]:
         """Score sampled frames; with ``artifact_dir``, also write ``frame_<id>.jpg`` and
         ``heatmap_<id>.jpg`` (Grad-CAM over the face crop) for each analyzed frame."""
+        with self._lock:
+            return self._predict(video_path, artifact_dir)
+
+    def score_frames(self, video_path: Path) -> list[float]:
+        """Per-frame fake probabilities over the served preprocessing, without Grad-CAM.
+
+        Returns an empty list when no sampled frame has a detectable face. Scores equal the
+        ``predict`` frame scores; this path only skips the backward pass, for bulk evaluation."""
+        with self._lock:
+            sampled = self._sample_faces(video_path)
+            if not sampled.images:
+                return []
+            assert self.model is not None
+            with torch.no_grad():
+                logits = self.model(torch.stack(sampled.images).to(self.device))
+            return torch.softmax(logits, dim=1)[:, 1].cpu().tolist()
+
+    def _sample_faces(self, video_path: Path) -> SampledFaces:
         if self.load_error is not None or self.model is None:
             detail = str(self.load_error) if self.load_error else "Model is not loaded"
             raise VideoInferenceError(f"Model loading failed: {detail}")
@@ -87,10 +125,7 @@ class VideoDetector:
             capture.release()
             raise VideoInferenceError("Uploaded video contains no readable frames")
 
-        images: list[torch.Tensor] = []
-        frame_indices: list[int] = []
-        frames: list[np.ndarray] = []
-        boxes: list[tuple[int, int, int, int]] = []
+        sampled = SampledFaces(frame_count, fps, width, height, [], [], [], [])
         for frame_index in sample_frame_indices(frame_count, self.frames):
             capture.set(cv2.CAP_PROP_POS_FRAMES, int(frame_index))
             ok, frame = capture.read()
@@ -101,20 +136,24 @@ class VideoDetector:
                 continue
             left, top, right, bottom = box
             rgb = cv2.cvtColor(frame[top:bottom, left:right], cv2.COLOR_BGR2RGB)
-            images.append(self.transform(Image.fromarray(rgb)))
-            frame_indices.append(int(frame_index))
-            frames.append(frame)
-            boxes.append(box)
+            sampled.images.append(self.transform(Image.fromarray(rgb)))
+            sampled.frame_indices.append(int(frame_index))
+            sampled.frames.append(frame)
+            sampled.boxes.append(box)
         capture.release()
+        return sampled
 
-        if not images:
+    def _predict(self, video_path: Path, artifact_dir: Path | None) -> dict[str, Any]:
+        sampled = self._sample_faces(video_path)
+        if not sampled.images:
             raise VideoInferenceError("No detectable face was found in the sampled video frames")
 
-        batch = torch.stack(images).to(self.device)
+        fps = sampled.fps
+        batch = torch.stack(sampled.images).to(self.device)
         probabilities, cams = self._predict_with_gradcam(batch)
         if artifact_dir is not None:
             artifact_dir.mkdir(parents=True, exist_ok=True)
-            for frame_index, frame, box, cam in zip(frame_indices, frames, boxes, cams):
+            for frame_index, frame, box, cam in zip(sampled.frame_indices, sampled.frames, sampled.boxes, cams):
                 _write_frame_artifacts(artifact_dir, frame_index, frame, box, cam)
         fake_probability = float(np.mean(probabilities))
         real_probability = 1.0 - fake_probability
@@ -127,18 +166,18 @@ class VideoDetector:
                 "fake_probability": round(float(probability), 6),
                 "face_box": list(box),
             }
-            for frame_index, probability, box in zip(frame_indices, probabilities, boxes)
+            for frame_index, probability, box in zip(sampled.frame_indices, probabilities, sampled.boxes)
         ]
         return {
             "prediction": prediction,
             "confidence": round(confidence, 6),
             "fake_probability": round(fake_probability, 6),
             "real_probability": round(real_probability, 6),
-            "frames_analyzed": len(images),
-            "duration_seconds": frame_count / fps if fps else None,
+            "frames_analyzed": len(sampled.images),
+            "duration_seconds": sampled.frame_count / fps if fps else None,
             "frame_rate": fps or None,
-            "width": width or None,
-            "height": height or None,
+            "width": sampled.width or None,
+            "height": sampled.height or None,
             "frame_scores": frame_scores,
         }
 

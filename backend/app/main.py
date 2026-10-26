@@ -150,13 +150,8 @@ def create_analysis(background_tasks: BackgroundTasks, file: UploadFile = File(.
         created_at=datetime.now(UTC),
     )
     repository.create(record)
-    background_tasks.add_task(_run_and_cleanup, analysis_id, media_path)
+    background_tasks.add_task(analysis_service.run, analysis_id, media_path)
     return AnalysisCreateResponse(analysis_id=analysis_id, status=AnalysisStatus.PROCESSING)
-
-
-def _run_and_cleanup(analysis_id: str, media_path: Path) -> None:
-    analysis_service.run(analysis_id, media_path)
-    media_path.unlink(missing_ok=True)
 
 
 def get_record_or_404(analysis_id: str) -> AnalysisRecord:

@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from app.schemas import (
 )
 from app.services.repository import AnalysisRepository
 from app.services.video_detector import VideoDetector, VideoInferenceError
+
+logger = logging.getLogger(__name__)
 
 
 class AnalysisService:
@@ -28,6 +31,13 @@ class AnalysisService:
         self.artifact_root = artifact_root
 
     def run(self, analysis_id: str, media_path: Path) -> None:
+        """Analyze the upload, always leaving the record COMPLETED or FAILED and the upload deleted."""
+        try:
+            self._run(analysis_id, media_path)
+        finally:
+            media_path.unlink(missing_ok=True)
+
+    def _run(self, analysis_id: str, media_path: Path) -> None:
         record = self.repository.get(analysis_id)
         if record is None:
             return
@@ -47,14 +57,20 @@ class AnalysisService:
             )
             self.repository.update(completed)
         except (OSError, VideoInferenceError) as error:
-            failed = record.model_copy(
-                update={
-                    "status": AnalysisStatus.FAILED,
-                    "completed_at": datetime.now(UTC),
-                    "error": f"Unable to read uploaded media: {error}",
-                }
-            )
-            self.repository.update(failed)
+            self._fail(record, f"Unable to read uploaded media: {error}")
+        except Exception as error:
+            logger.exception("Analysis %s failed unexpectedly", analysis_id)
+            self._fail(record, f"Analysis failed due to an internal error ({type(error).__name__}). Please try again.")
+
+    def _fail(self, record: AnalysisRecord, message: str) -> None:
+        failed = record.model_copy(
+            update={
+                "status": AnalysisStatus.FAILED,
+                "completed_at": datetime.now(UTC),
+                "error": message,
+            }
+        )
+        self.repository.update(failed)
 
     def _video_result(self, analysis_id: str, media_path: Path) -> AnalysisResult:
         artifact_dir = self.artifact_root / analysis_id if self.artifact_root else None

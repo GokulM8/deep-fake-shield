@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 from pathlib import Path
 
+from app import main
 from app.main import app
 
 
@@ -106,3 +107,21 @@ def test_video_frame_artifacts_are_served() -> None:
         assert image.content[:3] == b"\xff\xd8\xff"
     assert client.get(f"/api/v1/analyze/{analysis_id}/frames/999999/frame").status_code == 404
     assert client.get("/api/v1/analyze/DF-missing/frames/0/frame").status_code == 404
+
+
+def test_unexpected_detector_error_marks_failed_and_deletes_upload(monkeypatch) -> None:
+    def explode(*_args, **_kwargs):
+        raise RuntimeError("simulated detector crash")
+
+    monkeypatch.setattr(main.analysis_service.video_detector, "predict", explode)
+    response = client.post(
+        "/api/v1/analyze",
+        files={"file": ("crash.mp4", b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64, "video/mp4")},
+    )
+    assert response.status_code == 202
+    analysis_id = response.json()["analysis_id"]
+
+    body = client.get(f"/api/v1/analyze/{analysis_id}").json()
+    assert body["status"] == "failed"
+    assert "RuntimeError" in body["error"]
+    assert not (main.UPLOAD_ROOT / f"{analysis_id}.mp4").exists()

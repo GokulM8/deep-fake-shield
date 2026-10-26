@@ -1,3 +1,5 @@
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import cv2
@@ -58,3 +60,25 @@ def test_inference_writes_frame_and_gradcam_artifacts(tmp_path: Path) -> None:
         assert frame is not None and heatmap is not None
         assert frame.shape == heatmap.shape
         assert heatmap.max() > 0
+
+
+@pytest.mark.skipif(not SAMPLE_VIDEO.is_file(), reason=f"local test video missing: {SAMPLE_VIDEO}")
+def test_concurrent_predictions_are_safe_and_identical(tmp_path: Path) -> None:
+    detector = VideoDetector()
+    start = threading.Barrier(4)
+
+    def run(worker: int) -> float:
+        start.wait()
+        return detector.predict(SAMPLE_VIDEO, artifact_dir=tmp_path / str(worker))["fake_probability"]
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        scores = list(pool.map(run, range(4)))
+
+    assert scores == pytest.approx([scores[0]] * 4, abs=1e-6)
+
+
+@pytest.mark.skipif(not SAMPLE_VIDEO.is_file(), reason=f"local test video missing: {SAMPLE_VIDEO}")
+def test_score_frames_matches_served_frame_scores() -> None:
+    detector = VideoDetector()
+    served = [score["fake_probability"] for score in detector.predict(SAMPLE_VIDEO)["frame_scores"]]
+    assert detector.score_frames(SAMPLE_VIDEO) == pytest.approx(served, abs=1e-6)
