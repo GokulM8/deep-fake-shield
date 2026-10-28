@@ -60,6 +60,10 @@ class AnalysisResult(BaseModel):
     suspicious_regions: list[str] = Field(default_factory=list)
     suspicious_frames: list[float] = Field(default_factory=list)
     provenance: str
+    # Thresholds actually applied to this result (video verdict, per-frame flags); None for placeholders.
+    model_name: str | None = None
+    decision_threshold: float | None = Field(default=None, gt=0, lt=1)
+    frame_threshold: float | None = Field(default=None, gt=0, lt=1)
 
 
 class AnalysisRecord(BaseModel):

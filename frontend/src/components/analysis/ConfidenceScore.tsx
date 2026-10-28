@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
+import { formatPercent } from "@/lib/format";
 
 export function ConfidenceScore({
   value,
   ringColor = "var(--primary)",
   size = 190,
-  label = "Model Confidence",
+  label = "Model score",
 }: {
   value: number;
   ringColor?: string;
@@ -46,7 +47,9 @@ export function ConfidenceScore({
         />
       </svg>
       <div className="absolute text-center">
-        <div className="font-display text-3xl font-semibold tabular-nums">{value.toFixed(1)}%</div>
+        <div className="font-display text-3xl font-semibold tabular-nums">
+          {formatPercent(value)}
+        </div>
         <div className="label-caps mt-1">{label}</div>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { ChevronRight, Video } from "lucide-react";
 import { investigationsQuery } from "@/lib/api";
 import type { Verdict } from "@/lib/types";
 import { Panel } from "@/components/common/primitives";
+import { formatPercent } from "@/lib/format";
 
 export const Route = createFileRoute("/investigations")({
   head: () => ({
@@ -37,7 +38,7 @@ function InvestigationsPage() {
 
       <Panel className="mt-8 overflow-hidden">
         <div className="hidden grid-cols-[160px_minmax(0,1fr)_90px_170px_110px_150px] gap-4 border-b border-border px-5 py-3 lg:grid">
-          {["Analysis ID", "Filename", "Type", "Verdict", "Confidence", "Date"].map((h) => (
+          {["Analysis ID", "Filename", "Type", "Verdict", "Model score", "Date"].map((h) => (
             <span key={h} className="label-caps">
               {h}
             </span>
@@ -63,7 +64,7 @@ function InvestigationsPage() {
                   {item.verdict}
                 </span>
                 <span className="font-mono text-sm tabular-nums">
-                  {item.confidence.toFixed(1)}%
+                  {formatPercent(item.confidence)}
                 </span>
                 <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-xs text-muted-foreground">
                   <span className="min-w-0 truncate">{item.createdAt}</span>

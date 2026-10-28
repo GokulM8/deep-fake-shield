@@ -766,12 +766,12 @@ No formal security audit has been performed. This section is a code review.
 
 | # | Defect | Evidence | Impact | Fix |
 | --- | --- | --- | --- | --- |
-| D4 | Navbar "System Status: Online" is hard-coded | `Navbar.tsx` | Misleading when the backend is down or `degraded` | Read `/health` |
-| D5 | Evidence IDs are assigned by position | `api.ts` | "Face frame coverage" is tagged `compression` | Map by signal name |
+| D4 | **Fixed 2026-10-28:** the navbar reads `/health` every 15 s and shows Online / Degraded / Offline | `Navbar.tsx::SystemStatus` | — | — |
+| D5 | Evidence IDs are assigned by position, except coverage (now mapped by name to `face`) | `api.ts::toEvidence` | Minor | Map every signal by name |
 | D6 | "Faces detected" shows `frames_analyzed` | `api.ts` | Not a true face count | Return the count from the backend |
 | D7 | Tests depend on an untracked video | `.gitignore` | Fresh clones fail those tests | Commit a small licensed fixture |
 | D8 | `ml/training/train_efficientnet.py` is broken and incompatible | Missing `tqdm`; 1-logit head | Confusion | Delete it or mark it legacy |
-| D9 | "Face frame coverage" at 100% shows a red HIGH badge; "Likely Authentic" renders red on the report | UI | Misleading colours | Colour by meaning |
+| D9 | **Fixed 2026-10-28:** coverage shows COMPLETE (green) / PARTIAL; verdicts are coloured by meaning everywhere | `api.ts`, `lib/verdict.ts` | — | — |
 
 ### 10.3 Risks (not exploited, but plausible)
 
@@ -930,7 +930,7 @@ curl http://127.0.0.1:8000/api/v1/analyze/<id>          # status "completed" wit
 7. **Cross-dataset evaluation** (FaceForensics++, DFDC).
 8. **Return explicit "unsupported"** for image/audio instead of placeholder scores.
 9. **Persistence:** SQLite/PostgreSQL for records, and durable artifact storage.
-10. **Fix D4–D6 and D9 in the UI;** update `.env.example` (`DEEPFAKE_MODEL`, `DEEPFAKE_MODEL_PATH`, `DEEPFAKE_HEAD_PATH`, `DEEPFAKE_FRAMES`, `DEEPFAKE_THRESHOLD`).
+10. **Fix D5–D6 in the UI;** update `.env.example` (`DEEPFAKE_MODEL`, `DEEPFAKE_MODEL_PATH`, `DEEPFAKE_HEAD_PATH`, `DEEPFAKE_FRAMES`, `DEEPFAKE_THRESHOLD`).
 11. **Remove dead code** (`ml/explainability/gradcam.py`, `ml/training/train_efficientnet.py`).
 12. **Frontend tests** (Vitest + React Testing Library; Playwright) and **Python lint/type checking** (ruff + mypy) in CI.
 

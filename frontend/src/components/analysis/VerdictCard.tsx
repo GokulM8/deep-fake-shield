@@ -1,21 +1,34 @@
-import { AlertTriangle, ShieldCheck, ShieldQuestion } from "lucide-react";
-import type { Verdict } from "@/lib/types";
+import type { Verdict, VideoDecision } from "@/lib/types";
 import { Panel } from "@/components/common/primitives";
+import { formatScore, UNCALIBRATED_NOTE } from "@/lib/format";
+import { verdictTone } from "@/lib/verdict";
 import { ConfidenceScore } from "./ConfidenceScore";
 
-function verdictTone(verdict: Verdict) {
-  if (verdict === "Likely Authentic")
-    return { icon: ShieldCheck, color: "text-severity-low", ring: "var(--severity-low)" };
-  if (verdict === "Inconclusive")
-    return {
-      icon: ShieldQuestion,
-      color: "text-severity-unknown",
-      ring: "var(--severity-unknown)",
-    };
-  return { icon: AlertTriangle, color: "text-severity-high", ring: "var(--severity-high)" };
+/** "Video-level score 0.516 · decision threshold 0.999 (EfficientNet-B0 + MLP head)". */
+export function DecisionLine({ decision }: { decision: VideoDecision }) {
+  return (
+    <div className="space-y-1">
+      <p className="font-mono text-xs text-foreground">
+        Video-level score {formatScore(decision.score)}
+        {decision.threshold != null
+          ? ` · decision threshold ${formatScore(decision.threshold)}`
+          : ""}{" "}
+        <span className="text-muted-foreground">({decision.model})</span>
+      </p>
+      <p className="text-xs text-muted-foreground">{UNCALIBRATED_NOTE}</p>
+    </div>
+  );
 }
 
-export function VerdictCard({ verdict, confidence }: { verdict: Verdict; confidence: number }) {
+export function VerdictCard({
+  verdict,
+  confidence,
+  decision,
+}: {
+  verdict: Verdict;
+  confidence: number;
+  decision?: VideoDecision | undefined;
+}) {
   const tone = verdictTone(verdict);
   const Icon = tone.icon;
 
@@ -32,9 +45,15 @@ export function VerdictCard({ verdict, confidence }: { verdict: Verdict; confide
             </h2>
           </div>
           <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
-            Derived from fused visual, temporal and forensic evidence signals. Individual signals
-            remain independently reviewable below.
+            {decision
+              ? "Decided by the video-level head, which weighs all analysed frames together. Frame-level evidence remains reviewable below."
+              : "Derived from fused visual, temporal and forensic evidence signals. Individual signals remain independently reviewable below."}
           </p>
+          {decision ? (
+            <div className="mt-4">
+              <DecisionLine decision={decision} />
+            </div>
+          ) : null}
           <div className="mt-6 inline-flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border px-3 py-2">
             <span className="label-caps">AI-assisted forensic assessment</span>
             <span className="text-xs text-muted-foreground">Not legal certainty</span>

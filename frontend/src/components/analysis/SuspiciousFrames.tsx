@@ -9,9 +9,12 @@ const COLLAPSED_FRAMES = 6;
 export function SuspiciousFrames({
   frames,
   onSelect,
+  note,
 }: {
   frames: SuspiciousFrame[];
   onSelect: (frame: SuspiciousFrame) => void;
+  /** Shown above the grid, e.g. how frame flags relate to the verdict. */
+  note?: string | null;
 }) {
   const [expanded, setExpanded] = useState(false);
   // Frames arrive sorted by score; always show every flagged frame, and at least two rows.
@@ -21,6 +24,11 @@ export function SuspiciousFrames({
 
   return (
     <div>
+      {note ? (
+        <p className="mb-4 border-l-2 border-primary/40 pl-3 text-xs leading-relaxed text-muted-foreground">
+          {note}
+        </p>
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {visible.map((frame) => (
           <button

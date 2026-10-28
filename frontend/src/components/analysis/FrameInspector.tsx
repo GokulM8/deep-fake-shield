@@ -68,7 +68,7 @@ export function FrameInspector({
 
         <div className="grid gap-3 border-t border-border p-5 sm:grid-cols-3">
           <div className="rounded-md border border-border bg-muted/30 p-4">
-            <p className="label-caps">Frame Score</p>
+            <p className="label-caps">Frame-level score</p>
             <p className={cn("mt-1.5 font-mono text-2xl tabular-nums", scoreColor[frame.severity])}>
               {frame.score.toFixed(1)}%
             </p>

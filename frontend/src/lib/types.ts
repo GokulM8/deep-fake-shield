@@ -25,6 +25,8 @@ export interface EvidenceSignal {
   /** 0–100. Undefined when the signal is not scoreable (e.g. provenance). */
   score?: number;
   description: string;
+  /** Badge text when the severity name would mislead (e.g. "COMPLETE" coverage). */
+  badgeLabel?: string;
 }
 
 export interface ModelResult {
@@ -108,8 +110,13 @@ export interface Analysis {
   mediaType: MediaType;
   status: AnalysisStatus;
   verdict: Verdict;
-  /** Model confidence, 0–100. Distinct from the forensic assessment. */
+  /**
+   * Headline model score, 0–100. From the backend this is the video-level fake score that the
+   * verdict compares with its threshold; mock data uses the verdict's confidence.
+   */
   confidence: number;
+  /** How the backend reached the verdict; absent in mock data. */
+  decision?: VideoDecision;
   createdAt: string;
   modelAnalysis: ModelAnalysis;
   evidence: EvidenceSignal[];
@@ -123,6 +130,17 @@ export interface Analysis {
     executiveAssessment: string;
     finalAssessment: string;
   };
+}
+
+export interface VideoDecision {
+  /** Video-level fake score, 0–1. */
+  score: number;
+  /** Score at or above which the verdict is "manipulated", 0–1. */
+  threshold: number | null;
+  /** Frame-level score at or above which a frame is flagged, 0–1. */
+  frameThreshold: number | null;
+  /** Active serving model, e.g. "EfficientNet-B0 + MLP head". */
+  model: string;
 }
 
 export interface AnalysisSummary {

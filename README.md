@@ -213,6 +213,20 @@ Frames are flagged when their frame score is at least **0.3654** (the frame clas
 
 ---
 
+## Screenshots
+
+Captured on 2026-10-28 from the live app (default MLP mode) for one real (`Celeb-real/103.mp4`) and one fake (`Celeb-Youtube-fake/100.mp4`) test video:
+
+| | Real video (Likely Authentic, score 0.516) | Fake video (Likely Manipulated, score >0.999) |
+| --- | --- | --- |
+| Dashboard | [`real_dashboard.png`](docs/screenshots/real_dashboard.png) | [`fake_dashboard.png`](docs/screenshots/fake_dashboard.png) |
+| Frame inspector | [`real_inspector.png`](docs/screenshots/real_inspector.png) | [`fake_inspector.png`](docs/screenshots/fake_inspector.png) |
+| Report | [`real_report.png`](docs/screenshots/real_report.png) | [`fake_report.png`](docs/screenshots/fake_report.png) |
+
+The verdict panel shows the video-level score next to the head's decision threshold, with the note that scores are not calibrated probabilities. Scores of 0.9995 or more show as ">99.9%". (The embedded video player is blank in headless captures; frames and heatmaps are real.)
+
+---
+
 ## Technology stack
 
 | Layer | Technologies |
@@ -308,7 +322,7 @@ curl http://127.0.0.1:8000/health
 }
 ```
 
-The analysis result shape is unchanged: `verdict`, `confidence`, `fake_probability`, `real_probability`, `frames_analyzed` and `frame_scores[]` (frame id, timestamp, frame-level `fake_probability`, `face_box`, `thumbnail_url`, `heatmap_url`). In head modes, `fake_probability` is the head's video-level score and each `frame_scores[].fake_probability` is the frame classifier's score.
+The analysis result shape is unchanged: `verdict`, `confidence`, `fake_probability`, `real_probability`, `frames_analyzed` and `frame_scores[]` (frame id, timestamp, frame-level `fake_probability`, `face_box`, `thumbnail_url`, `heatmap_url`). In head modes, `fake_probability` is the head's video-level score and each `frame_scores[].fake_probability` is the frame classifier's score. Each result also records the `model_name`, `decision_threshold` and `frame_threshold` it was produced with (added fields; nothing was removed or renamed).
 
 ---
 
@@ -347,16 +361,14 @@ The tests cover model and head loading (strict state-dict match for both heads),
 
 ## Known defects
 
-D1–D3 (concurrency crashes, score drift, analyses stuck in `processing`) are **fixed** and covered by tests.
+D1–D3 (concurrency crashes, score drift, analyses stuck in `processing`) are **fixed** and covered by tests. D4 (navbar reads `/health`: Online / Degraded / Offline) and D9 (coverage shown as COMPLETE in green; verdict coloured by meaning) were fixed on 2026-10-28, and coverage is now mapped by signal name (part of D5).
 
 | # | Severity | Defect | Fix |
 | --- | --- | --- | --- |
-| D4 | 🟡 Medium | Navbar "System Status: Online" is hard-coded | Read `/health` |
-| D5 | 🟡 Medium | Evidence IDs assigned by position | Map by signal name |
+| D5 | ⚪ Low | Non-coverage evidence IDs still assigned by position | Map every signal by name |
 | D6 | 🟡 Medium | "Faces detected" shows `frames_analyzed` | Return the real face count |
 | D7 | 🟡 Medium | Some tests depend on an untracked local video, so a fresh clone skips or fails them | Commit a small licensed fixture |
 | D8 | ⚪ Low | `ml/training/train_efficientnet.py` is legacy and broken | Delete or mark legacy |
-| D9 | ⚪ Low | "Face frame coverage" at 100% shows a red HIGH badge; "Likely Authentic" renders in red on the report | Colour by meaning, not by level |
 
 Other risks: no authentication, `torch.load(weights_only=False)` on checkpoint paths, no rate limit or inference timeout, and the startup `rmtree` of the artifact folder is unsafe with multiple workers.
 
@@ -385,7 +397,7 @@ Other risks: no authentication, `torch.load(weights_only=False)` on checkpoint p
 2. Identity-aware re-split and re-evaluation.
 3. Dense consecutive-frame clips (e.g. 16 frames at full frame rate) to test whether temporal modelling helps at all.
 4. Fine-tune the encoder on the full training split; cross-dataset evaluation (FaceForensics++, DFDC).
-5. A small committed fixture video so all tests run on a clean clone (D7); fix D4–D6 and D9.
+5. A small committed fixture video so all tests run on a clean clone (D7); fix D5–D6.
 
 **Later**
 

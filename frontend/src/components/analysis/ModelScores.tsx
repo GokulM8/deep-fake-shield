@@ -1,5 +1,6 @@
 import type { ModelAnalysis } from "@/lib/types";
 import { Panel } from "@/components/common/primitives";
+import { formatPercent } from "@/lib/format";
 
 function Bar({ label, sub, value }: { label: string; sub: string; value: number }) {
   return (
@@ -9,7 +10,7 @@ function Bar({ label, sub, value }: { label: string; sub: string; value: number 
           <p className="truncate text-sm font-medium">{label}</p>
           <p className="truncate font-mono text-xs text-muted-foreground">{sub}</p>
         </div>
-        <span className="shrink-0 font-mono text-sm tabular-nums">{value.toFixed(1)}%</span>
+        <span className="shrink-0 font-mono text-sm tabular-nums">{formatPercent(value)}</span>
       </div>
       <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-muted">
         <div
@@ -38,8 +39,8 @@ export function ModelScores({ model }: { model: ModelAnalysis }) {
           ))}
           <div className="border-t border-border pt-6">
             <Bar
-              label="Overall Model Confidence"
-              sub="Weighted fusion"
+              label="Overall model score"
+              sub={model.models.length > 1 ? "Weighted fusion" : "Single video-level model"}
               value={model.overallConfidence}
             />
           </div>

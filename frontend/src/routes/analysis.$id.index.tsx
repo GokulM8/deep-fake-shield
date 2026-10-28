@@ -4,6 +4,7 @@ import { Download, FileText, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import sampleFrame from "@/assets/sample-frame.jpg";
 import { analysisQuery, getUploadedMediaUrl, USING_MOCK_DATA } from "@/lib/api";
+import { frameFlagNote } from "@/lib/format";
 import type { SuspiciousFrame } from "@/lib/types";
 import { MockBanner } from "@/components/common/MockBanner";
 import { Panel, SectionTitle } from "@/components/common/primitives";
@@ -99,7 +100,11 @@ function AnalysisDashboard() {
 
       {/* Verdict */}
       <section className="mt-6">
-        <VerdictCard verdict={analysis.verdict} confidence={analysis.confidence} />
+        <VerdictCard
+          verdict={analysis.verdict}
+          confidence={analysis.confidence}
+          decision={analysis.decision}
+        />
       </section>
 
       {/* Evidence */}
@@ -107,7 +112,7 @@ function AnalysisDashboard() {
         <SectionTitle
           index="01"
           title="Evidence Summary"
-          description="Independent signals. Model confidence is reported separately from the forensic assessment."
+          description="Independent signals. The model score is reported separately from the forensic assessment."
         />
         <EvidencePanel evidence={analysis.evidence} />
       </section>
@@ -245,7 +250,11 @@ function AnalysisDashboard() {
           title={isVideo ? "Suspicious Frames" : "Suspicious Regions"}
           description="Select an entry to open the explainability inspector."
         />
-        <SuspiciousFrames frames={analysis.suspiciousFrames} onSelect={setInspected} />
+        <SuspiciousFrames
+          frames={analysis.suspiciousFrames}
+          onSelect={setInspected}
+          note={frameFlagNote(analysis.decision)}
+        />
       </section>
 
       {/* Forensics */}

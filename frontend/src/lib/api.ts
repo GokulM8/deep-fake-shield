@@ -7,6 +7,7 @@ import type {
   Severity,
   SuspiciousFrame,
   Verdict,
+  VideoDecision,
 } from "./types";
 import { frameSeverity } from "./severity";
 
@@ -76,7 +77,45 @@ interface BackendRecord {
     suspicious_regions: string[];
     suspicious_frames: number[];
     provenance: string;
+    model_name?: string | null;
+    decision_threshold?: number | null;
+    frame_threshold?: number | null;
   } | null;
+}
+
+export interface HealthStatus {
+  status: "ok" | "degraded" | string;
+  service: string;
+  inference_mode: string;
+  model: string;
+  decision_threshold: number | null;
+}
+
+const COVERAGE_SIGNAL = "Face frame coverage";
+
+/** Map evidence signals by name, so a signal keeps its kind if the order changes. */
+function toEvidence(signals: BackendSignal[]): EvidenceSignal[] {
+  return signals.map((signal, index): EvidenceSignal => {
+    if (signal.name === COVERAGE_SIGNAL) {
+      // Coverage measures input quality, not risk: full coverage is good news.
+      const complete = signal.score >= 1;
+      return {
+        id: "face",
+        label: signal.name,
+        severity: complete ? "LOW" : "MEDIUM",
+        badgeLabel: complete ? "COMPLETE" : "PARTIAL",
+        score: Math.round(signal.score * 100),
+        description: signal.explanation,
+      };
+    }
+    return {
+      id: index === 0 ? "visual" : "temporal",
+      label: signal.name,
+      severity: severity(signal.level),
+      score: signal.score * 100,
+      description: signal.explanation,
+    };
+  });
 }
 
 function severity(level: string): Severity {
@@ -106,13 +145,21 @@ function verdict(value: string): Verdict {
 
 function toAnalysis(record: BackendRecord): Analysis {
   const result = record.result;
-  const evidence = (result?.signals ?? []).map((signal, index): EvidenceSignal => ({
-    id: index === 0 ? "visual" : index === 1 ? "compression" : "temporal",
-    label: signal.name,
-    severity: severity(signal.level),
-    score: Math.round(signal.score * 100),
-    description: signal.explanation,
-  }));
+  const evidence = toEvidence(result?.signals ?? []);
+  // The verdict compares the video-level fake score with the threshold; show that score, unrounded.
+  const modelScore =
+    result?.fake_probability != null
+      ? result.fake_probability * 100
+      : (result?.confidence ?? 0) * 100;
+  const decision: VideoDecision | undefined =
+    result?.fake_probability != null && result.model_name
+      ? {
+          score: result.fake_probability,
+          threshold: result.decision_threshold ?? null,
+          frameThreshold: result.frame_threshold ?? null,
+          model: result.model_name,
+        }
+      : undefined;
   const flaggedTimes = new Set(result?.suspicious_frames ?? []);
   const suspiciousFrames = (result?.frame_scores ?? [])
     .filter((frame) => frame.timestamp !== null && frame.timestamp !== undefined)
@@ -176,7 +223,8 @@ function toAnalysis(record: BackendRecord): Analysis {
     mediaType: record.media_type,
     status: record.status,
     verdict: verdict(result?.verdict ?? "inconclusive"),
-    confidence: Math.round((result?.confidence ?? 0) * 100),
+    confidence: modelScore,
+    ...(decision ? { decision } : {}),
     createdAt: record.created_at,
     modelAnalysis: {
       models: result?.frames_analyzed
@@ -186,11 +234,11 @@ function toAnalysis(record: BackendRecord): Analysis {
               label: "Video-level decision",
               // The first signal is named after the active serving model, e.g. "EfficientNet-B0 + MLP head".
               architecture: result.signals[0]?.name ?? "EfficientNet-B0",
-              confidence: Math.round((result.confidence ?? 0) * 100),
+              confidence: modelScore,
             },
           ]
         : [],
-      overallConfidence: Math.round((result?.confidence ?? 0) * 100),
+      overallConfidence: modelScore,
       inputFrames: result?.frames_analyzed ?? 0,
       framesAnalyzed: result?.frames_analyzed ?? 0,
       facesDetected: result?.frames_analyzed ?? 0,
@@ -230,7 +278,7 @@ function toAnalysis(record: BackendRecord): Analysis {
       generatedAt: record.completed_at ?? record.created_at,
       executiveAssessment:
         "This result is produced by the configured backend analysis service. Missing signals are not evidence of manipulation.",
-      finalAssessment: "Model confidence is not legal certainty.",
+      finalAssessment: "Model scores are not calibrated probabilities and are not legal certainty.",
     },
   };
 }
@@ -277,13 +325,7 @@ export async function getEvidence(id: string): Promise<EvidenceSignal[]> {
   const signals = await request<BackendSignal[]>(
     `/api/v1/analyze/${encodeURIComponent(id)}/evidence`,
   );
-  return signals.map((signal, index) => ({
-    id: index === 0 ? "visual" : index === 1 ? "compression" : "temporal",
-    label: signal.name,
-    severity: severity(signal.level),
-    score: Math.round(signal.score * 100),
-    description: signal.explanation,
-  }));
+  return toEvidence(signals);
 }
 
 /** GET /api/v1/analyze/{analysis_id}/report */
@@ -312,6 +354,18 @@ export async function listInvestigations(): Promise<AnalysisSummary[]> {
 export const analysisQuery = (id: string) => ({
   queryKey: ["analysis", id] as const,
   queryFn: () => getAnalysis(id),
+});
+
+/** GET /health. Throws when the backend is unreachable. */
+export async function getHealth(): Promise<HealthStatus> {
+  return request<HealthStatus>("/health");
+}
+
+export const healthQuery = () => ({
+  queryKey: ["health"] as const,
+  queryFn: () => getHealth(),
+  refetchInterval: 15_000,
+  retry: false,
 });
 
 export const investigationsQuery = () => ({

@@ -11,7 +11,9 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { healthQuery, USING_MOCK_DATA } from "@/lib/api";
 
 const NAV = [
   { to: "/analyze", label: "Analyze" },
@@ -292,13 +294,7 @@ export function Navbar() {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <span className="hidden items-center gap-2 rounded-md border border-border px-2.5 py-1.5 lg:inline-flex">
-            <span className="relative grid h-2 w-2 place-items-center">
-              <span className="absolute h-2 w-2 animate-pulse-ring rounded-full bg-primary" />
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-            </span>
-            <span className="label-caps">System Status: Online</span>
-          </span>
+          <SystemStatus />
 
           <div className="hidden sm:block">
             <ThemeToggle />
@@ -353,5 +349,45 @@ export function Navbar() {
         </nav>
       </div>
     </header>
+  );
+}
+
+const STATUS_STYLE = {
+  Online: { dot: "bg-primary", pulse: true },
+  Degraded: { dot: "bg-severity-medium", pulse: false },
+  Offline: { dot: "bg-severity-high", pulse: false },
+  Checking: { dot: "bg-severity-unknown", pulse: false },
+} as const;
+
+/** Backend status from GET /health: Online, Degraded (a checkpoint failed to load) or Offline. */
+function SystemStatus() {
+  const health = useQuery({ ...healthQuery(), enabled: !USING_MOCK_DATA });
+  const status: keyof typeof STATUS_STYLE = USING_MOCK_DATA
+    ? "Online"
+    : health.isError
+      ? "Offline"
+      : health.data
+        ? health.data.status === "ok"
+          ? "Online"
+          : "Degraded"
+        : "Checking";
+  const style = STATUS_STYLE[status];
+  return (
+    <span
+      className="hidden items-center gap-2 rounded-md border border-border px-2.5 py-1.5 lg:inline-flex"
+      title={
+        health.data
+          ? `${health.data.model} · threshold ${health.data.decision_threshold ?? "—"}`
+          : undefined
+      }
+    >
+      <span className="relative grid h-2 w-2 place-items-center">
+        {style.pulse ? (
+          <span className={cn("absolute h-2 w-2 animate-pulse-ring rounded-full", style.dot)} />
+        ) : null}
+        <span className={cn("h-1.5 w-1.5 rounded-full", style.dot)} />
+      </span>
+      <span className="label-caps">System Status: {status}</span>
+    </span>
   );
 }

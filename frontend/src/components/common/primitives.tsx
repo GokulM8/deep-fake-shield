@@ -16,7 +16,16 @@ export const severityBar: Record<Severity, string> = {
   UNKNOWN: "bg-severity-unknown",
 };
 
-export function SeverityBadge({ severity, className }: { severity: Severity; className?: string }) {
+export function SeverityBadge({
+  severity,
+  label,
+  className,
+}: {
+  severity: Severity;
+  /** Text to show instead of the severity name, styled by the severity. */
+  label?: string | undefined;
+  className?: string;
+}) {
   return (
     <span
       className={cn(
@@ -25,7 +34,7 @@ export function SeverityBadge({ severity, className }: { severity: Severity; cla
         className,
       )}
     >
-      {severity}
+      {label ?? severity}
     </span>
   );
 }

@@ -90,6 +90,9 @@ def test_real_video_upload_returns_model_result() -> None:
     body = result.json()
     assert body["status"] == "completed"
     assert 1 <= body["result"]["frames_analyzed"] <= main.video_detector.frames
+    assert body["result"]["decision_threshold"] == main.video_detector.threshold
+    assert body["result"]["frame_threshold"] == main.video_detector.frame_threshold
+    assert body["result"]["model_name"] == main.video_detector.signal_name
     assert len(body["result"]["frame_scores"]) == body["result"]["frames_analyzed"]
     assert body["result"]["fake_probability"] is not None
     assert body["result"]["real_probability"] is not None

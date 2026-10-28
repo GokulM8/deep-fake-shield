@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { EvidenceKind, EvidenceSignal } from "@/lib/types";
 import { MetricBar, Panel, SeverityBadge } from "@/components/common/primitives";
+import { formatSignalScore } from "@/lib/format";
 
 const ICONS: Record<EvidenceKind, LucideIcon> = {
   visual: Eye,
@@ -30,14 +31,12 @@ export function EvidenceCard({ signal }: { signal: EvidenceSignal }) {
           <Icon className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
         </span>
         <h3 className="min-w-0 truncate text-sm font-medium">{signal.label}</h3>
-        <SeverityBadge severity={signal.severity} />
+        <SeverityBadge severity={signal.severity} label={signal.badgeLabel} />
       </div>
 
       <div className="mt-4 flex items-baseline justify-between">
-        <span className="label-caps">Signal strength</span>
-        <span className="font-mono text-lg tabular-nums">
-          {signal.score !== undefined ? `${signal.score}%` : "—"}
-        </span>
+        <span className="label-caps">{signal.badgeLabel ? "Coverage" : "Signal strength"}</span>
+        <span className="font-mono text-lg tabular-nums">{formatSignalScore(signal)}</span>
       </div>
       <div className="mt-2">
         <MetricBar value={signal.score ?? 0} severity={signal.severity} />

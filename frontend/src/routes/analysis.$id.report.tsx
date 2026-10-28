@@ -3,6 +3,9 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { ArrowLeft, Printer, ShieldHalf } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { analysisQuery, USING_MOCK_DATA } from "@/lib/api";
+import { formatPercent, formatScore, formatSignalScore, frameFlagNote } from "@/lib/format";
+import { verdictTone } from "@/lib/verdict";
+import { DecisionLine } from "@/components/analysis/VerdictCard";
 import { SEVERITY_COLOR, frameSeverity } from "@/lib/severity";
 import { MockBanner } from "@/components/common/MockBanner";
 import { KeyValue, MetricBar, SeverityBadge } from "@/components/common/primitives";
@@ -118,14 +121,21 @@ function ReportPage() {
       <div className="mt-8 rounded-lg border border-border bg-panel p-6">
         <p className="label-caps">Authenticity Assessment</p>
         <div className="mt-3 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4">
-          <h2 className="min-w-0 text-2xl font-semibold text-severity-high sm:text-3xl">
+          <h2
+            className={`min-w-0 text-2xl font-semibold sm:text-3xl ${verdictTone(analysis.verdict).color}`}
+          >
             {analysis.verdict}
           </h2>
           <div className="shrink-0 text-right">
-            <p className="font-mono text-2xl tabular-nums">{analysis.confidence.toFixed(1)}%</p>
-            <p className="label-caps">Model Confidence</p>
+            <p className="font-mono text-2xl tabular-nums">{formatPercent(analysis.confidence)}</p>
+            <p className="label-caps">Model score</p>
           </div>
         </div>
+        {analysis.decision ? (
+          <div className="mt-4">
+            <DecisionLine decision={analysis.decision} />
+          </div>
+        ) : null}
       </div>
 
       <ReportSection index={1} title="Executive Assessment">
@@ -142,9 +152,9 @@ function ReportPage() {
                 <span className="min-w-0 truncate text-sm">{signal.label}</span>
                 <span className="flex shrink-0 items-center gap-3">
                   <span className="font-mono text-xs tabular-nums">
-                    {signal.score !== undefined ? `${signal.score}%` : "—"}
+                    {formatSignalScore(signal)}
                   </span>
-                  <SeverityBadge severity={signal.severity} />
+                  <SeverityBadge severity={signal.severity} label={signal.badgeLabel} />
                 </span>
               </div>
               <div className="mt-2">
@@ -160,12 +170,21 @@ function ReportPage() {
           <KeyValue
             key={m.id}
             label={`${m.label} — ${m.architecture}`}
-            value={`${m.confidence.toFixed(1)}%`}
+            value={formatPercent(m.confidence)}
           />
         ))}
+        {analysis.decision?.threshold != null ? (
+          <KeyValue label="Decision threshold" value={formatScore(analysis.decision.threshold)} />
+        ) : null}
+        {analysis.decision?.frameThreshold != null ? (
+          <KeyValue
+            label="Frame flag threshold (frame-level model)"
+            value={formatScore(analysis.decision.frameThreshold)}
+          />
+        ) : null}
         <KeyValue
-          label="Overall model confidence"
-          value={`${analysis.modelAnalysis.overallConfidence.toFixed(1)}%`}
+          label="Overall model score"
+          value={formatPercent(analysis.modelAnalysis.overallConfidence)}
         />
         <KeyValue label="Frames analyzed" value={analysis.modelAnalysis.framesAnalyzed} />
         <KeyValue label="Faces detected" value={analysis.modelAnalysis.facesDetected} />
@@ -173,6 +192,11 @@ function ReportPage() {
       </ReportSection>
 
       <ReportSection index={4} title="Suspicious Frames">
+        {frameFlagNote(analysis.decision) ? (
+          <p className="mb-4 border-l-2 border-primary/40 pl-3 text-xs leading-relaxed text-muted-foreground">
+            {frameFlagNote(analysis.decision)}
+          </p>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           {analysis.suspiciousFrames.map((f) => (
             <div key={f.id} className="rounded-md border border-border p-4">
@@ -192,11 +216,9 @@ function ReportPage() {
 
       <ReportSection index={5} title="Explainability">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Attention visualisations concentrate on the facial boundary and on facial feature regions
-          (eyes and mouth) across the highest-scoring frames. This is consistent with
-          face-replacement or resynthesis pipelines, which typically leave blending residue at
-          region boundaries. Visualisations in this build are demonstration renders and are not
-          produced by a trained model.
+          {USING_MOCK_DATA
+            ? "Attention visualisations concentrate on the facial boundary and on facial feature regions (eyes and mouth) across the highest-scoring frames. This is consistent with face-replacement or resynthesis pipelines, which typically leave blending residue at region boundaries. Visualisations in this build are demonstration renders and are not produced by a trained model."
+            : "Grad-CAM heatmaps computed from the EfficientNet-B0 frame encoder for each analysed frame. They show where the frame-level evidence came from; they are an explanation aid, not proof of manipulation."}
         </p>
       </ReportSection>
 
@@ -267,8 +289,9 @@ function ReportPage() {
           {analysis.report.finalAssessment}
         </p>
         <p className="mt-5 border-l-2 border-primary/40 pl-3 text-xs leading-relaxed text-muted-foreground">
-          This report represents an AI-assisted forensic assessment. Model confidence does not
-          constitute legal certainty. Values in this build are demonstration fixtures.
+          This report represents an AI-assisted forensic assessment. Model scores are not calibrated
+          probabilities and do not constitute legal certainty.
+          {USING_MOCK_DATA ? " Values in this build are demonstration fixtures." : ""}
         </p>
       </ReportSection>
     </div>

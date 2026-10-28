@@ -419,7 +419,7 @@ Say this plainly, and show that you understand every line you're asked about.
 - **Missing or corrupt checkpoint:** the app still starts, `/health` says `degraded`, and video jobs fail with "Model loading failed".
 - **Invalid `DEEPFAKE_MODEL`, threshold or frame count:** the server refuses to start with a clear message.
 - **OpenCV can't decode the file / no face / any unexpected error:** a `failed` record; the upload is always deleted.
-- **The backend is down:** the frontend shows `Backend request failed`, but the navbar still says "Online" (D4).
+- **The backend is down:** the frontend shows `Backend request failed`, and the navbar status (read from `/health` every 15 s) switches to **Offline**; a missing checkpoint shows **Degraded**.
 
 **"What are the weakest parts?"**
 - calibration (thresholds 0.88 and 0.9993);

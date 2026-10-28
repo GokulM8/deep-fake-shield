@@ -109,7 +109,8 @@ class AnalysisService:
                 EvidenceSignal(
                     name="Face frame coverage",
                     score=prediction["frames_analyzed"] / self.video_detector.frames,
-                    level="high" if prediction["frames_analyzed"] == self.video_detector.frames else "medium",
+                    # Coverage is a quality indicator, not a risk: full coverage is low risk.
+                    level="low" if prediction["frames_analyzed"] == self.video_detector.frames else "medium",
                     explanation="Frames with no detectable face were skipped before inference.",
                 ),
             ],
@@ -120,6 +121,9 @@ class AnalysisService:
                 if item["fake_probability"] >= self.video_detector.frame_threshold and item["timestamp"] is not None
             ],
             provenance=self.video_detector.provenance,
+            model_name=self.video_detector.signal_name,
+            decision_threshold=self.video_detector.threshold,
+            frame_threshold=self.video_detector.frame_threshold,
         )
 
     @staticmethod
