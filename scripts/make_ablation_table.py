@@ -2,11 +2,13 @@
 
 One row per (run, threshold) on the test split. Runs are any directory with a metrics.json in the
 ``evaluate_full.py`` schema; missing fields render as an em dash, so older or partial runs still list.
+Rows from the Colab run's ``hybrid_colab/ablation_colab.csv`` (already in percent) are added too.
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from pathlib import Path
 from typing import Any
@@ -21,8 +23,14 @@ RUN_ORDER = [
     "baseline_f16_top3",
     "baseline_f16_max",
     "temporal_f16",
+    "hybrid_effnet_transformer_f16",
+    "meanpool_mlp_f16 (no temporal)",
+    "temporal_served",
+    "mlp_served",
 ]
-COLUMNS = ["Run", "Frames", "Threshold", "Accuracy", "Balanced acc.", "Real recall", "Fake recall", "F1", "ROC-AUC", "PR-AUC"]
+COLAB_CSV = "hybrid_colab/ablation_colab.csv"
+COLAB_FIELDS = ["accuracy", "balanced_accuracy", "real_recall", "fake_recall", "f1", "roc_auc", "pr_auc"]
+COLUMNS = ["Run", "Source", "Frames", "Threshold", "Accuracy", "Balanced acc.", "Real recall", "Fake recall", "F1", "ROC-AUC", "PR-AUC"]
 
 
 def pct(value: Any) -> str:
@@ -37,6 +45,7 @@ def rows_for(metrics: dict[str, Any], fallback_name: str) -> list[list[str]]:
         label = f"{name} ({threshold:.4f})" if name != "0.5" and isinstance(threshold, (int, float)) else name
         rows.append([
             metrics.get("run_name", fallback_name),
+            metrics.get("source", "local"),
             str(metrics.get("frames", "—")),
             label,
             pct(item.get("accuracy")),
@@ -50,6 +59,16 @@ def rows_for(metrics: dict[str, Any], fallback_name: str) -> list[list[str]]:
     return rows
 
 
+def colab_rows(path: Path) -> dict[str, list[list[str]]]:
+    """Rows per run from the Colab CSV; values there are already percentages."""
+    runs: dict[str, list[list[str]]] = {}
+    with path.open(newline="", encoding="utf-8") as handle:
+        for item in csv.DictReader(handle):
+            values = [f"{float(item[field]):.2f}%" if item.get(field) else "—" for field in COLAB_FIELDS]
+            runs.setdefault(item["run"], []).append([item["run"], "Colab", "16", item["threshold"], *values])
+    return runs
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evaluations-dir", type=Path, default=ROOT / "artifacts/evaluations")
@@ -57,18 +76,27 @@ def main() -> int:
     args = parser.parse_args()
     output = args.output or args.evaluations_dir / "ablation_table.md"
 
-    rows, notes = [], []
-    def order(path: Path) -> tuple[int, str]:
-        name = path.parent.name
+    def order(name: str) -> tuple[int, str]:
         return (RUN_ORDER.index(name) if name in RUN_ORDER else len(RUN_ORDER), name)
 
-    for path in sorted(args.evaluations_dir.glob("*/metrics.json"), key=order):
+    runs: dict[str, list[list[str]]] = {}
+    notes = []
+    colab_path = args.evaluations_dir / COLAB_CSV
+    if colab_path.is_file():
+        colab = colab_rows(colab_path)
+        runs.update(colab)
+        notes.append(f"- Colab rows ({', '.join(f'`{name}`' for name in colab)}): from `{COLAB_CSV}`, "
+                     "computed on Colab T4 from fp16-extracted embeddings; same test split, threshold tuned on val")
+    for path in args.evaluations_dir.glob("*/metrics.json"):
+        if path.parent.name == "hybrid_colab":
+            continue  # summarised by ablation_colab.csv; its metrics.json uses a different schema
         metrics = json.loads(path.read_text(encoding="utf-8"))
-        rows.extend(rows_for(metrics, path.parent.name))
+        runs[path.parent.name] = rows_for(metrics, path.parent.name)
         test_split = metrics.get("splits", {}).get("test", {})
         commit = (metrics.get("git") or {}).get("commit") or "unknown"
         notes.append(
-            f"- `{path.parent.name}`: checkpoint `{metrics.get('checkpoint', '?')}`, "
+            f"- `{path.parent.name}`: checkpoint `{metrics.get('checkpoint', '?')}`"
+            + (f" + head `{metrics['head_checkpoint']}`" if metrics.get("head_checkpoint") else "") + ", "
             f"test evaluated {test_split.get('evaluated', '?')}/{test_split.get('total', '?')} "
             f"(no face: {test_split.get('skipped_no_face', '?')}, errors: {test_split.get('skipped_errors', '?')}), "
             f"tuned on {metrics.get('threshold_selection', {}).get('split', '?')} by "
@@ -76,6 +104,7 @@ def main() -> int:
             + (f", **limit {metrics['limit']} (quick check)**" if metrics.get("limit") else "")
         )
 
+    rows = [row for name in sorted(runs, key=order) for row in runs[name]]
     lines = [
         "# Ablation table (test split)",
         "",
@@ -83,7 +112,7 @@ def main() -> int:
         "Tuned thresholds are chosen on validation only.",
         "",
         "| " + " | ".join(COLUMNS) + " |",
-        "| " + " | ".join(["---"] * 3 + ["---:"] * (len(COLUMNS) - 3)) + " |",
+        "| " + " | ".join(["---"] * 4 + ["---:"] * (len(COLUMNS) - 4)) + " |",
         *("| " + " | ".join(row) + " |" for row in rows),
         "",
         "## Runs",

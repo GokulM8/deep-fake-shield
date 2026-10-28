@@ -1,0 +1,8 @@
+{
+  "checkpoint": "models/deepfake_shield_video_v1.pt",
+  "checkpoint_sha256": "646618db85ac00aa1965f55d87480228b6b1df16dabcd6aa73c5400e5268f0c1",
+  "frames": 16,
+  "model": "mlp",
+  "head_checkpoint": "models/deepfake_shield_meanpool_mlp_v1.pt",
+  "head_checkpoint_sha256": "cc9dd8cf4075555ce5ad5a2933fae14bf418e6a4e0df5176162e1b821409134c"
+}
