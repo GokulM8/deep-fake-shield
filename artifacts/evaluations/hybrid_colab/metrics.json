@@ -1,0 +1,56 @@
+{
+  "run": "hybrid_effnet_transformer_f16",
+  "best_epoch": 6,
+  "max_epochs": 100,
+  "tuned_threshold": 0.8794939517974854,
+  "threshold_rule": "youden_j on val",
+  "early_stopping": "inner-val split of train",
+  "config": {
+    "d_in": 1280,
+    "d_model": 256,
+    "layers": 2,
+    "heads": 4,
+    "dropout": 0.2,
+    "n_frames": 16,
+    "lr": 0.0003,
+    "weight_decay": 0.01,
+    "batch_size": 64,
+    "max_epochs": 100,
+    "patience": 100,
+    "frame_dropout": 0.25,
+    "inner_val": 0.15,
+    "seed": 42
+  },
+  "test_0.5": {
+    "accuracy": 0.9578713968957872,
+    "balanced_accuracy": 0.9073532004937401,
+    "real_recall": 0.8411214953271028,
+    "fake_recall": 0.9735849056603774,
+    "precision": 0.9785082174462706,
+    "f1": 0.9760403530895334,
+    "roc_auc": 0.9783224592958326,
+    "pr_auc": 0.9965315680832143,
+    "tn": 90,
+    "fp": 17,
+    "fn": 21,
+    "tp": 774
+  },
+  "test_tuned": {
+    "accuracy": 0.9401330376940134,
+    "balanced_accuracy": 0.9175101393052372,
+    "real_recall": 0.8878504672897196,
+    "fake_recall": 0.9471698113207547,
+    "precision": 0.984313725490196,
+    "f1": 0.9653846153846154,
+    "roc_auc": 0.9783224592958326,
+    "pr_auc": 0.9965315680832143,
+    "tn": 95,
+    "fp": 12,
+    "fn": 42,
+    "tp": 753
+  },
+  "class_counts_test": {
+    "real": 107,
+    "fake": 795
+  }
+}

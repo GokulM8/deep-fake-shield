@@ -1,0 +1,13 @@
+run,threshold,accuracy,balanced_accuracy,real_recall,fake_recall,f1,roc_auc,pr_auc
+baseline_f16_mean,0.5,63.19,75.48,91.59,59.37,73.98,88.19,97.87
+baseline_f16_mean,tuned (0.2917),79.6,81.55,84.11,78.99,87.22,88.19,97.87
+baseline_f16_max,0.5,85.14,76.21,64.49,87.92,91.25,85.11,97.34
+baseline_f16_max,tuned (0.7414),72.84,77.72,84.11,71.32,82.23,85.11,97.34
+baseline_f16_top3,0.5,83.37,78.43,71.96,84.91,90.0,86.4,97.59
+baseline_f16_top3,tuned (0.6049),77.27,78.61,80.37,76.86,85.63,86.4,97.59
+baseline_f16_median,0.5,62.53,75.91,93.46,58.36,73.3,88.3,97.87
+baseline_f16_median,tuned (0.2257),81.26,80.88,80.37,81.38,88.45,88.3,97.87
+hybrid_effnet_transformer_f16,0.5,95.79,90.74,84.11,97.36,97.6,97.83,99.65
+hybrid_effnet_transformer_f16,tuned (0.8795),94.01,91.75,88.79,94.72,96.54,97.83,99.65
+meanpool_mlp_f16 (no temporal),0.5,97.45,90.47,81.31,99.62,98.57,98.86,99.83
+meanpool_mlp_f16 (no temporal),tuned (0.9993),93.46,94.67,96.26,93.08,96.17,98.86,99.83

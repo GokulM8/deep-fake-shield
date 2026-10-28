@@ -19,7 +19,7 @@ export function VideoTimeline({
     <div>
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4">
         <div className="min-w-0">
-          <p className="label-caps">Frame Authenticity Timeline</p>
+          <p className="label-caps">Frame-level evidence (EfficientNet-B0)</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Per-frame manipulation probability. Select a point to inspect that frame.
           </p>

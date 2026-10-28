@@ -21,7 +21,7 @@ from app.schemas import (
 )
 from app.services.analysis import AnalysisService, sha256_file
 from app.services.repository import AnalysisRepository
-from app.services.video_detector import VideoDetector
+from app.services.video_detector import create_detector
 
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 UPLOAD_ROOT = Path(gettempdir()) / "deepfake-shield-uploads"
@@ -53,7 +53,8 @@ MAGIC_SIGNATURES: dict[str, tuple[bytes, ...]] = {
 }
 
 repository = AnalysisRepository()
-video_detector = VideoDetector()
+# DEEPFAKE_MODEL picks the head: mlp (default), temporal or baseline.
+video_detector = create_detector()
 analysis_service = AnalysisService(repository, video_detector, artifact_root=ARTIFACT_ROOT)
 app = FastAPI(title="DeepFake Shield API", version="0.1.0")
 app.add_middleware(
@@ -104,7 +105,9 @@ def health() -> HealthResponse:
     return HealthResponse(
         status="ok" if video_detector.load_error is None else "degraded",
         service="deepfake-shield-api",
-        inference_mode="efficientnet_b0_video",
+        inference_mode=video_detector.inference_mode,
+        model=video_detector.signal_name,
+        decision_threshold=video_detector.threshold,
     )
 
 

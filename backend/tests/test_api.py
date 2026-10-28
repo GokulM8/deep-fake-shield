@@ -12,7 +12,10 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_health() -> None:
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["inference_mode"] == "efficientnet_b0_video"
+    body = response.json()
+    assert body["inference_mode"] == main.video_detector.inference_mode
+    assert body["model"] == main.video_detector.signal_name
+    assert body["decision_threshold"] == main.video_detector.threshold
 
 
 def test_cors_allows_local_frontend() -> None:

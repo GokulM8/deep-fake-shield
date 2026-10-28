@@ -129,7 +129,7 @@ function AnalysisDashboard() {
           title={isVideo ? "Video Viewer" : "Image Viewer"}
           description={
             isVideo
-              ? "Scrub the media and inspect the frame-level authenticity signal."
+              ? "Scrub the media and inspect the frame-level evidence (EfficientNet-B0). The verdict is a separate video-level decision."
               : "Inspect the image and its region-level authenticity signal."
           }
         />
@@ -202,11 +202,11 @@ function AnalysisDashboard() {
             </div>
             <p className="mt-5 text-xs leading-relaxed text-muted-foreground">
               {isVideo
-                ? `The highest sampled fake probability is ${peakScore}% across ${analysis.modelAnalysis.framesAnalyzed} analyzed frame${analysis.modelAnalysis.framesAnalyzed === 1 ? "" : "s"}.`
+                ? `Frame-level evidence (EfficientNet-B0): the highest sampled fake probability is ${peakScore}% across ${analysis.modelAnalysis.framesAnalyzed} analyzed frame${analysis.modelAnalysis.framesAnalyzed === 1 ? "" : "s"}.`
                 : "Strongest anomaly response is concentrated on the facial boundary and mouth region."}
             </p>
             <div className="mt-5 border-t border-border pt-4">
-              <p className="label-caps">Sampled frame scores</p>
+              <p className="label-caps">Frame-level evidence (EfficientNet-B0)</p>
               {/* Up to 16 sampled frames: scroll instead of stretching the video viewer beside it. */}
               <div className="mt-3 max-h-48 space-y-2 overflow-y-auto pr-1">
                 {analysis.timeline.map((point) => (

@@ -25,7 +25,12 @@ import torch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
-from app.services.video_detector import VideoDetector, VideoInferenceError  # noqa: E402
+from app.services.video_detector import (  # noqa: E402
+    EmbeddingHeadDetector,
+    VideoDetector,
+    VideoInferenceError,
+    create_detector,
+)
 
 import matplotlib  # noqa: E402
 
@@ -47,7 +52,9 @@ PREPROCESSING = "backend VideoDetector: linspace frame sampling, Haar face crop 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument("--checkpoint", type=Path, required=True, help="Frame classifier (the heads' frozen encoder)")
+    parser.add_argument("--model", default="baseline", choices=["baseline", "mlp", "temporal"],
+                        help="Serving mode to evaluate (DEEPFAKE_MODEL); heads use their default checkpoints in models/")
     parser.add_argument("--frames", type=int, required=True, help="Evenly sampled frames per video")
     parser.add_argument("--splits-dir", type=Path, default=ROOT / "artifacts/splits")
     parser.add_argument("--out-dir", type=Path, required=True)
@@ -138,10 +145,10 @@ def score_split(
         for done, row in enumerate(missing, start=1):
             entry = {"video_path": row["video_path"], "label": row["label"], "fake_prob": "", "n_valid_frames": "0", "error": ""}
             try:
-                scores = detector.score_frames(local_path(row["video_path"], args.video_root))
-                entry["n_valid_frames"] = str(len(scores))
-                if scores:
-                    entry["fake_prob"] = f"{float(np.mean(scores)):.6f}"
+                score, faces = detector.score_video_detail(local_path(row["video_path"], args.video_root))
+                entry["n_valid_frames"] = str(faces)
+                if score is not None:
+                    entry["fake_prob"] = f"{score:.6f}"
             except VideoInferenceError as error:
                 entry["error"] = str(error)
             writer.writerow(entry)
@@ -220,7 +227,7 @@ def evaluate_scores(labels: np.ndarray, scores: np.ndarray, thresholds: dict[str
 
 def plot_curves(out_dir: Path, curves: dict[str, tuple[np.ndarray, np.ndarray]], test_metrics: dict[str, Any]) -> None:
     labels, scores = curves["test"]
-    markers = {"0.5": ("o", "tab:red"), "tuned": ("s", "tab:green")}
+    markers = {"0.5": ("o", "tab:red"), "tuned": ("s", "tab:green"), "stored": ("^", "tab:purple")}
 
     fig, ax = plt.subplots(figsize=(5.5, 5))
     for split, (split_labels, split_scores) in curves.items():
@@ -303,18 +310,23 @@ def main() -> int:
         "checkpoint_sha256": file_sha256(checkpoint),
         "frames": args.frames,
     }
-    # Cached probabilities are only valid for the checkpoint and frame count that produced them.
+    detector = create_detector(args.model, model_path=checkpoint, frames=args.frames, device=device)
+    if detector.load_error is not None:
+        print(f"Model loading failed: {detector.load_error}", file=sys.stderr)
+        return 1
+    is_head = isinstance(detector, EmbeddingHeadDetector)
+    if is_head:
+        # Keys only for heads, so caches recorded before --model existed stay valid.
+        run_config.update({"model": args.model, "head_checkpoint": str(detector.head_path.relative_to(ROOT)),
+                           "head_checkpoint_sha256": file_sha256(detector.head_path)})
+
+    # Cached probabilities are only valid for the checkpoints and frame count that produced them.
     config_path = args.out_dir / "run_config.json"
     if config_path.is_file() and json.loads(config_path.read_text()) != run_config:
         print(f"Cache in {args.out_dir} was made with a different checkpoint or frame count; use another --out-dir.",
               file=sys.stderr)
         return 2
     config_path.write_text(json.dumps(run_config, indent=2) + "\n", encoding="utf-8")
-
-    detector = VideoDetector(model_path=checkpoint, frames=args.frames, device=device)
-    if detector.load_error is not None:
-        print(f"Model loading failed: {detector.load_error}", file=sys.stderr)
-        return 1
 
     summaries, arrays = {}, {}
     for split in SPLITS:
@@ -331,12 +343,13 @@ def main() -> int:
 
     write_evaluation(args.out_dir, summaries, arrays, {
         **run_config,
-        "model": "efficientnet_b0",
-        "aggregation": "mean fake probability over frames with a detected face",
+        "model": detector.inference_mode if is_head else "efficientnet_b0",
+        "aggregation": (f"{detector.signal_name} over the masked 16-slot embedding sequence" if is_head
+                        else "mean fake probability over frames with a detected face"),
         "preprocessing": PREPROCESSING,
         "device": str(device),
         "limit": args.limit or None,
-    })
+    }, extra_thresholds={"stored": detector.threshold} if is_head else None)
     return 0
 
 
@@ -345,13 +358,16 @@ def write_evaluation(
     summaries: dict[str, dict[str, Any]],
     arrays: dict[str, tuple[np.ndarray, np.ndarray]],
     run_info: dict[str, Any],
+    extra_thresholds: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     """Tune the threshold on val, score val and test at 0.5 and tuned, and write metrics.json + plots.
+
+    ``extra_thresholds`` adds fixed rows, e.g. ``{"stored": t}`` for a head's checkpoint threshold.
 
     ``arrays`` maps each split to (labels, video fake scores) for the evaluated videos only; any
     scorer (frame mean, other aggregations, the temporal model) reports through this one schema."""
     tuned, best_j = youden_threshold(*arrays["val"])
-    thresholds = {"0.5": DEFAULT_THRESHOLD, "tuned": tuned}
+    thresholds = {"0.5": DEFAULT_THRESHOLD, "tuned": tuned, **(extra_thresholds or {})}
     results = {split: evaluate_scores(*arrays[split], thresholds) for split in SPLITS}
 
     metrics = {

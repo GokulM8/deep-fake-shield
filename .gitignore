@@ -23,3 +23,6 @@ colab_bundle.zip
 colab_bundle_part*.zip
 results_bundle.zip
 *.zip.partial
+
+# Duplicate copy of the Colab outputs (canonical copies are in models/ and artifacts/evaluations/hybrid_colab/)
+ml/ArchLens-AI_models/

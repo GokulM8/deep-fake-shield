@@ -7,7 +7,7 @@ import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import cv2
 import numpy as np
@@ -22,12 +22,20 @@ if str(ML_ROOT) not in sys.path:
 
 from data.video_dataset import FaceCropper, sample_frame_indices  # noqa: E402
 from models.efficientnet_baseline import build_model  # noqa: E402
+from models.video_heads import load_head  # noqa: E402
 
 # 16 frames at the val-tuned threshold (artifacts/evaluations/baseline_f16) beat 2 frames on every
 # test metric, and cost ~3.9 s per video with Grad-CAM on CPU (Apple M4).
 DEFAULT_THRESHOLD = 0.3654
 DEFAULT_FRAMES = 16
 MODEL_FILENAME = "deepfake_shield_video_v1.pt"
+# Video-level heads over the frozen backbone's 16-frame embeddings (Colab T4 run, see
+# artifacts/evaluations/hybrid_colab); each checkpoint stores its val-tuned threshold.
+HEAD_FILENAMES = {
+    "mlp": "deepfake_shield_meanpool_mlp_v1.pt",
+    "temporal": "deepfake_shield_temporal_v1.pt",
+}
+DEFAULT_MODEL = "mlp"
 ARTIFACT_MAX_WIDTH = 640
 
 
@@ -120,12 +128,6 @@ class VideoDetector:
         self.model_path = model_path or Path(
             os.getenv("DEEPFAKE_MODEL_PATH", str(PROJECT_ROOT / "models" / MODEL_FILENAME))
         )
-        self.threshold = threshold if threshold is not None else _env_float("DEEPFAKE_THRESHOLD", DEFAULT_THRESHOLD)
-        self.frames = frames if frames is not None else _env_int("DEEPFAKE_FRAMES", DEFAULT_FRAMES)
-        if not 0 < self.threshold < 1:
-            raise ValueError(f"Decision threshold must be between 0 and 1, got {self.threshold}")
-        if self.frames < 1:
-            raise ValueError(f"Frames per video must be at least 1, got {self.frames}")
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.transform = build_transform()
         self.cropper = FaceCropper()
@@ -134,10 +136,54 @@ class VideoDetector:
         self._lock = threading.Lock()
         self.model: torch.nn.Module | None = None
         self.load_error: Exception | None = None
+        stored: dict[str, Any] = {}
         try:
             self.model = self._load_model()
+            stored = self._load_extras()
         except Exception as error:  # surface a useful failed analysis instead of breaking app import
             self.load_error = error
+
+        self.threshold: float | None = (
+            threshold if threshold is not None
+            else _env_float("DEEPFAKE_THRESHOLD", stored.get("threshold", self.default_threshold))
+        )
+        self.frames = frames if frames is not None else _env_int("DEEPFAKE_FRAMES", stored.get("frames", DEFAULT_FRAMES))
+        if self.threshold is not None and not 0 < self.threshold < 1:
+            raise ValueError(f"Decision threshold must be between 0 and 1, got {self.threshold}")
+        if self.frames < 1:
+            raise ValueError(f"Frames per video must be at least 1, got {self.frames}")
+        if stored.get("frames") is not None and self.frames != stored["frames"]:
+            # Embeddings fill fixed sampling slots and the threshold was tuned at this count.
+            raise ValueError(f"The {self.name} head was trained on {stored['frames']} frames, got DEEPFAKE_FRAMES={self.frames}")
+
+    name = "baseline"
+    # Head detectors have no fallback: their threshold comes from the checkpoint or the environment.
+    default_threshold: float | None = DEFAULT_THRESHOLD
+
+    @property
+    def frame_threshold(self) -> float | None:
+        """Threshold for flagging individual frames by their frame-classifier score."""
+        return self.threshold
+
+    @property
+    def inference_mode(self) -> str:
+        return "efficientnet_b0_video"
+
+    @property
+    def signal_name(self) -> str:
+        return "EfficientNet-B0 video model"
+
+    @property
+    def score_explanation(self) -> str:
+        return f"Mean fake probability across detected faces in {self.frames} sampled frames"
+
+    @property
+    def provenance(self) -> str:
+        return f"model checkpoint: {self.model_path.name}"
+
+    def _load_extras(self) -> dict[str, Any]:
+        """Load anything beyond the frame classifier; return stored ``threshold``/``frames`` defaults."""
+        return {}
 
     def _load_model(self) -> torch.nn.Module:
         if not self.model_path.is_file():
@@ -154,6 +200,15 @@ class VideoDetector:
         ``heatmap_<id>.jpg`` (Grad-CAM over the face crop) for each analyzed frame."""
         with self._lock:
             return self._predict(video_path, artifact_dir)
+
+    def score_video(self, video_path: Path) -> float | None:
+        """The served video fake probability, or None when no sampled frame has a face."""
+        return self.score_video_detail(video_path)[0]
+
+    def score_video_detail(self, video_path: Path) -> tuple[float | None, int]:
+        """The served video fake probability (None without faces) and the number of face frames."""
+        scores = self.score_frames(video_path)
+        return (float(np.mean(scores)) if scores else None), len(scores)
 
     def score_frames(self, video_path: Path) -> list[float]:
         """Per-frame fake probabilities over the served preprocessing, without Grad-CAM.
@@ -181,13 +236,11 @@ class VideoDetector:
             raise VideoInferenceError("No detectable face was found in the sampled video frames")
 
         fps = sampled.fps
-        batch = torch.stack(sampled.images).to(self.device)
-        probabilities, cams = self._predict_with_gradcam(batch)
+        probabilities, fake_probability, cams = self._score_with_gradcam(sampled)
         if artifact_dir is not None:
             artifact_dir.mkdir(parents=True, exist_ok=True)
             for frame_index, frame, box, cam in zip(sampled.frame_indices, sampled.frames, sampled.boxes, cams):
                 _write_frame_artifacts(artifact_dir, frame_index, frame, box, cam)
-        fake_probability = float(np.mean(probabilities))
         real_probability = 1.0 - fake_probability
         prediction = "FAKE" if fake_probability >= self.threshold else "REAL"
         confidence = fake_probability if prediction == "FAKE" else real_probability
@@ -213,9 +266,19 @@ class VideoDetector:
             "frame_scores": frame_scores,
         }
 
-    def _predict_with_gradcam(self, batch: torch.Tensor) -> tuple[list[float], np.ndarray]:
-        """Return per-image fake probabilities and Grad-CAM maps for the fake logit."""
+    def _score_with_gradcam(self, sampled: SampledFaces) -> tuple[list[float], float, np.ndarray]:
+        """Frame fake probabilities, the video fake probability and per-frame Grad-CAM maps."""
+        probabilities, cams = self._predict_with_gradcam(torch.stack(sampled.images).to(self.device))
+        return probabilities, float(np.mean(probabilities)), cams
+
+    def _predict_with_gradcam(
+        self, batch: torch.Tensor, frame_logits: Callable[[torch.Tensor], torch.Tensor] | None = None
+    ) -> tuple[list[float], np.ndarray]:
+        """Return per-image fake probabilities and Grad-CAM maps for the fake logit.
+
+        ``frame_logits`` maps the face batch to per-image logits; it defaults to the frame classifier."""
         assert self.model is not None
+        frame_logits = frame_logits or self.model
         captured: dict[str, torch.Tensor] = {}
 
         def keep_activation(_module: torch.nn.Module, _inputs: Any, output: torch.Tensor) -> None:
@@ -224,7 +287,7 @@ class VideoDetector:
 
         handle = self.model.features[-1].register_forward_hook(keep_activation)
         try:
-            logits = self.model(batch)
+            logits = frame_logits(batch)
             self.model.zero_grad(set_to_none=True)
             # Eval-mode BatchNorm keeps samples independent, so one backward pass gives each its own map.
             logits[:, 1].sum().backward()
@@ -239,7 +302,110 @@ class VideoDetector:
         return probabilities, (cams / peaks).detach().cpu().numpy()
 
 
-def _env_float(name: str, default: float) -> float:
+class EmbeddingHeadDetector(VideoDetector):
+    """The frame classifier as a frozen encoder, with a video-level head over its frame embeddings.
+
+    Frame scores, Grad-CAM maps, frame images and face boxes all come from the backbone (its own
+    classifier gives the frame-level scores); the video verdict comes from the head, at the head
+    checkpoint's stored threshold unless DEEPFAKE_THRESHOLD overrides it.
+    """
+
+    default_threshold = None
+    _LABELS = {
+        "mlp": ("efficientnet_b0_meanpool_mlp", "EfficientNet-B0 + MLP head"),
+        "temporal": ("efficientnet_b0_temporal_transformer", "EfficientNet-B0 + Transformer head"),
+    }
+
+    def __init__(self, kind: str, head_path: Path | None = None, **kwargs: Any) -> None:
+        if kind not in HEAD_FILENAMES:
+            raise ValueError(f"Unknown head {kind!r}; expected one of {sorted(HEAD_FILENAMES)}")
+        self.name = kind
+        self.head_path = head_path or Path(
+            os.getenv("DEEPFAKE_HEAD_PATH", str(PROJECT_ROOT / "models" / HEAD_FILENAMES[kind]))
+        )
+        self.head: torch.nn.Module | None = None
+        super().__init__(**kwargs)
+
+    @property
+    def frame_threshold(self) -> float | None:
+        # Frame scores come from the backbone classifier, so flag them at its own tuned threshold,
+        # not at the head's (which lives on a different, far less calibrated scale).
+        return DEFAULT_THRESHOLD
+
+    @property
+    def inference_mode(self) -> str:
+        return self._LABELS[self.name][0]
+
+    @property
+    def signal_name(self) -> str:
+        return self._LABELS[self.name][1]
+
+    @property
+    def score_explanation(self) -> str:
+        return (f"Video-level head score over embeddings of detected faces in {self.frames} sampled frames "
+                "(frame scores come from the frame classifier)")
+
+    @property
+    def provenance(self) -> str:
+        return f"model checkpoints: {self.model_path.name} (frame encoder), {self.head_path.name} (head)"
+
+    def _load_extras(self) -> dict[str, Any]:
+        if not self.head_path.is_file():
+            raise FileNotFoundError(f"Head checkpoint not found: {self.head_path}")
+        self.head, checkpoint = load_head(self.head_path, self.device)
+        encoder = checkpoint.get("encoder_checkpoint")
+        if encoder and encoder != self.model_path.name:
+            raise ValueError(f"{self.head_path.name} was trained on {encoder}, not {self.model_path.name}")
+        return {"threshold": float(checkpoint["threshold"]), "frames": int(checkpoint["n_frames"])}
+
+    def score_video_detail(self, video_path: Path) -> tuple[float | None, int]:
+        """The head's video fake probability (None without faces) and the number of face frames."""
+        with self._lock:
+            sampled = self._sample_faces(video_path)
+            if not sampled.images:
+                return None, 0
+            assert self.model is not None
+            with torch.no_grad():
+                embeddings, _ = embed_and_score(self.model, torch.stack(sampled.images).to(self.device))
+                return self._head_probability(sampled.slots, embeddings), len(sampled.images)
+
+    def _score_with_gradcam(self, sampled: SampledFaces) -> tuple[list[float], float, np.ndarray]:
+        assert self.model is not None
+        captured: dict[str, torch.Tensor] = {}
+
+        def frame_logits(batch: torch.Tensor) -> torch.Tensor:
+            # One backbone pass yields both the embeddings for the head and the frame logits for Grad-CAM.
+            captured["embeddings"] = torch.flatten(self.model.avgpool(self.model.features(batch)), 1)
+            return self.model.classifier(captured["embeddings"])
+
+        probabilities, cams = self._predict_with_gradcam(torch.stack(sampled.images).to(self.device), frame_logits)
+        with torch.no_grad():
+            video_probability = self._head_probability(sampled.slots, captured["embeddings"].detach())
+        return probabilities, video_probability, cams
+
+    def _head_probability(self, slots: list[int], embeddings: torch.Tensor) -> float:
+        """Place each face embedding in its sampling slot (no-face slots stay zero and masked out)."""
+        assert self.head is not None
+        index = torch.tensor(slots, device=self.device)
+        x = torch.zeros(1, self.frames, embeddings.shape[1], device=self.device)
+        x[0, index] = embeddings.float()
+        mask = torch.zeros(1, self.frames, dtype=torch.bool, device=self.device)
+        mask[0, index] = True
+        logits = self.head(x, mask)
+        return float(torch.softmax(logits.float(), dim=1)[0, 1])
+
+
+def create_detector(kind: str | None = None, **kwargs: Any) -> VideoDetector:
+    """The serving detector named by ``kind`` or ``DEEPFAKE_MODEL``: mlp (default), temporal or baseline."""
+    kind = (kind or os.getenv("DEEPFAKE_MODEL") or DEFAULT_MODEL).strip().lower()
+    if kind == "baseline":
+        return VideoDetector(**kwargs)
+    if kind in HEAD_FILENAMES:
+        return EmbeddingHeadDetector(kind, **kwargs)
+    raise ValueError(f"DEEPFAKE_MODEL must be one of baseline, {', '.join(HEAD_FILENAMES)}; got {kind!r}")
+
+
+def _env_float(name: str, default: float | None) -> float | None:
     value = os.getenv(name)
     try:
         return float(value) if value else default

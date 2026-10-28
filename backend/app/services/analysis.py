@@ -97,11 +97,11 @@ class AnalysisService:
             height=prediction["height"],
             signals=[
                 EvidenceSignal(
-                    name="EfficientNet-B0 video model",
+                    name=self.video_detector.signal_name,
                     score=fake_probability,
                     level="high" if is_fake else "low",
                     explanation=(
-                        f"Mean fake probability across detected faces in {self.video_detector.frames} sampled frames, "
+                        f"{self.video_detector.score_explanation}, "
                         f"flagged at {self.video_detector.threshold:g} or above; "
                         "this score is a model probability, not calibrated certainty."
                     ),
@@ -117,9 +117,9 @@ class AnalysisService:
             suspicious_frames=[
                 float(item["timestamp"])
                 for item in prediction["frame_scores"]
-                if item["fake_probability"] >= self.video_detector.threshold and item["timestamp"] is not None
+                if item["fake_probability"] >= self.video_detector.frame_threshold and item["timestamp"] is not None
             ],
-            provenance="model checkpoint: deepfake_shield_video_v1.pt",
+            provenance=self.video_detector.provenance,
         )
 
     @staticmethod

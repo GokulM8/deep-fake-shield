@@ -80,3 +80,5 @@ class HealthResponse(BaseModel):
     status: str
     service: str
     inference_mode: str
+    model: str
+    decision_threshold: float | None

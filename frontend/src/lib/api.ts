@@ -153,9 +153,11 @@ function toAnalysis(record: BackendRecord): Analysis {
         suspiciousRegion: flagged
           ? (result?.suspicious_regions[0] ?? "Face region")
           : "None flagged",
-        modelAttention: hasHeatmap ? "Grad-CAM, EfficientNet-B0 final conv block" : "Not provided",
-        explanation: `The detector gave the face in this frame a ${score.toFixed(1)}% fake probability${
-          flagged ? ", above the decision threshold" : ", below the decision threshold"
+        modelAttention: hasHeatmap
+          ? "Grad-CAM, EfficientNet-B0 frame classifier, final conv block"
+          : "Not provided",
+        explanation: `Frame-level evidence (EfficientNet-B0): the face in this frame scored a ${score.toFixed(1)}% fake probability${
+          flagged ? ", above the frame threshold" : ", below the frame threshold"
         }.${hasHeatmap ? " Warmer heatmap areas pushed the score towards fake the most." : ""}`,
       };
     })
@@ -181,8 +183,9 @@ function toAnalysis(record: BackendRecord): Analysis {
         ? [
             {
               id: "efficientnet-b0",
-              label: "Video detector",
-              architecture: "EfficientNet-B0",
+              label: "Video-level decision",
+              // The first signal is named after the active serving model, e.g. "EfficientNet-B0 + MLP head".
+              architecture: result.signals[0]?.name ?? "EfficientNet-B0",
               confidence: Math.round((result.confidence ?? 0) * 100),
             },
           ]

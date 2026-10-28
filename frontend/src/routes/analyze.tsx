@@ -80,8 +80,8 @@ function AnalyzePage() {
           Analyze Digital Media
         </h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-          Upload a video for live EfficientNet analysis. Image and audio model pipelines are queued
-          for a later release.
+          Upload a video for live EfficientNet-B0-based analysis. Image and audio model pipelines
+          are queued for a later release.
         </p>
       </div>
 
