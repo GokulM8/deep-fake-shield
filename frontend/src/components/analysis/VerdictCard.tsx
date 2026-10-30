@@ -4,12 +4,12 @@ import { formatScore, UNCALIBRATED_NOTE } from "@/lib/format";
 import { verdictTone } from "@/lib/verdict";
 import { ConfidenceScore } from "./ConfidenceScore";
 
-/** "Video-level score 0.516 · decision threshold 0.999 (EfficientNet-B0 + MLP head)". */
+/** "Video-level fake score 0.516 · decision threshold 0.999 (EfficientNet-B0 + MLP head)". */
 export function DecisionLine({ decision }: { decision: VideoDecision }) {
   return (
     <div className="space-y-1">
       <p className="font-mono text-xs text-foreground">
-        Video-level score {formatScore(decision.score)}
+        Video-level fake score {formatScore(decision.score)}
         {decision.threshold != null
           ? ` · decision threshold ${formatScore(decision.threshold)}`
           : ""}{" "}
@@ -62,6 +62,9 @@ export function VerdictCard({
 
         <div className="justify-self-start md:justify-self-end">
           <ConfidenceScore value={confidence} ringColor={tone.ring} />
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            0% = no manipulation signal · 100% = strong
+          </p>
         </div>
       </div>
     </Panel>

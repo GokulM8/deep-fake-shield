@@ -38,7 +38,7 @@ function InvestigationsPage() {
 
       <Panel className="mt-8 overflow-hidden">
         <div className="hidden grid-cols-[160px_minmax(0,1fr)_90px_170px_110px_150px] gap-4 border-b border-border px-5 py-3 lg:grid">
-          {["Analysis ID", "Filename", "Type", "Verdict", "Model score", "Date"].map((h) => (
+          {["Analysis ID", "Filename", "Type", "Verdict", "Fake score", "Date"].map((h) => (
             <span key={h} className="label-caps">
               {h}
             </span>

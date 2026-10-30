@@ -128,7 +128,7 @@ function ReportPage() {
           </h2>
           <div className="shrink-0 text-right">
             <p className="font-mono text-2xl tabular-nums">{formatPercent(analysis.confidence)}</p>
-            <p className="label-caps">Model score</p>
+            <p className="label-caps">Fake score</p>
           </div>
         </div>
         {analysis.decision ? (
@@ -183,7 +183,7 @@ function ReportPage() {
           />
         ) : null}
         <KeyValue
-          label="Overall model score"
+          label="Overall fake score"
           value={formatPercent(analysis.modelAnalysis.overallConfidence)}
         />
         <KeyValue label="Frames analyzed" value={analysis.modelAnalysis.framesAnalyzed} />

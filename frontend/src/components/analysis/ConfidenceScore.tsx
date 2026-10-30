@@ -5,7 +5,7 @@ export function ConfidenceScore({
   value,
   ringColor = "var(--primary)",
   size = 190,
-  label = "Model score",
+  label = "Fake score",
 }: {
   value: number;
   ringColor?: string;

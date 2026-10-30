@@ -17,7 +17,7 @@ export function FinalAssessment({ analysis }: { analysis: Analysis }) {
             <span className="font-mono text-3xl tabular-nums">
               {formatPercent(analysis.confidence)}
             </span>
-            <span className="label-caps">Model score</span>
+            <span className="label-caps">Fake score</span>
           </div>
           {analysis.decision ? (
             <div className="mt-3">

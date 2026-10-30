@@ -39,7 +39,7 @@ export function ModelScores({ model }: { model: ModelAnalysis }) {
           ))}
           <div className="border-t border-border pt-6">
             <Bar
-              label="Overall model score"
+              label="Overall fake score"
               sub={model.models.length > 1 ? "Weighted fusion" : "Single video-level model"}
               value={model.overallConfidence}
             />

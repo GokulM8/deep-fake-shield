@@ -17,26 +17,28 @@ DeepFake Shield is a forensic analysis platform for digital media authenticity. 
 2. [Progress timeline](#progress-timeline)
 3. [Feature status](#feature-status)
 4. [Model card](#model-card)
-5. [Results and ablation](#results-and-ablation)
-6. [How the hybrid model was trained](#how-the-hybrid-model-was-trained)
-7. [Architecture and inference flow](#architecture-and-inference-flow)
-8. [Frame-level explainability](#frame-level-explainability)
-9. [Technology stack](#technology-stack)
-10. [Repository structure](#repository-structure)
-11. [Quick start](#quick-start)
-12. [API surface](#api-surface)
-13. [Testing and verification status](#testing-and-verification-status)
-14. [Known defects](#known-defects)
-15. [Known limitations](#known-limitations)
-16. [Roadmap](#roadmap)
-17. [Dataset and research workflow](#dataset-and-research-workflow)
-18. [Project documentation](#project-documentation)
+5. [Previous models vs current model](#previous-models-vs-current-model)
+6. [Results and ablation](#results-and-ablation)
+7. [How the models were trained](#how-the-models-were-trained)
+8. [Algorithm](#algorithm)
+9. [Architecture and inference flow](#architecture-and-inference-flow)
+10. [Frame-level explainability](#frame-level-explainability)
+11. [Technology stack](#technology-stack)
+12. [Repository structure](#repository-structure)
+13. [Quick start](#quick-start)
+14. [API surface](#api-surface)
+15. [Testing and verification status](#testing-and-verification-status)
+16. [Known defects](#known-defects)
+17. [Known limitations](#known-limitations)
+18. [Roadmap](#roadmap)
+19. [Dataset and research workflow](#dataset-and-research-workflow)
+20. [Project documentation](#project-documentation)
 
 ---
 
 ## Project status at a glance
 
-_Status as of 2026-10-28, branch `review-hybrid`._
+_Status as of 2026-10-30, branch `main`._
 
 | Area | State | Summary |
 | --- | --- | --- |
@@ -45,7 +47,8 @@ _Status as of 2026-10-28, branch `review-hybrid`._
 | Model quality | 🟢 Strong on this dataset | Test ROC-AUC **98.86%**, tuned balanced accuracy **94.67%** (baseline: 88.13% / 79.75%) |
 | Calibration | 🟡 Weak | Head thresholds are very high (0.8795, 0.9993): the heads are overconfident and uncalibrated |
 | Explainability | 🟢 Live | Real per-frame Grad-CAM heatmaps, frame images and face boxes from the frame encoder |
-| Frontend | 🟢 Integrated | Upload, processing, dashboard, frame inspector, report, investigations list |
+| Frontend | 🟢 Integrated | Upload, processing, dashboard, frame inspector, report, investigations list; the headline number is labelled **Fake score** |
+| Training record | 🟢 Recorded | Frame-encoder fine-tuning run in [`ml/training/model_training_deepfake.ipynb`](ml/training/model_training_deepfake.ipynb); head training in [`notebooks/hybrid_temporal_colab.ipynb`](notebooks/hybrid_temporal_colab.ipynb) |
 | Backend tests | 🟢 31 / 31 passing | Includes concurrency, failure handling and all three serving modes |
 | Concurrency / failure handling | 🟢 Fixed | D1–D3 fixed: inference lock, catch-all → `failed`, guaranteed upload cleanup |
 | Frontend quality | 🟡 Clean, untested | 0 TypeScript errors, 0 ESLint errors (10 warnings); **no frontend tests** |
@@ -63,7 +66,8 @@ _Status as of 2026-10-28, branch `review-hybrid`._
 | 2026-09-14 | `78a3b18` | Initial commit: Lovable-generated TanStack Start frontend scaffold |
 | 2026-09-14 | `67f3fa1` | **Video ML baseline pipeline**: dataset discovery, leakage-checked splits, EfficientNet-B0 training and evaluation scripts, temporal Transformer prototype |
 | 2026-09-14 | `48bfbad` | **Frontend integrated with the FastAPI backend** (async upload + polling contract) |
-| 2026-09-15 | `7e5c300` | **Trained checkpoint integrated**: real video inference through the web UI |
+| 2026-09-15 | Colab notebook | **Frame encoder fine-tuned** on a Colab T4 (`scripts/train_baseline.py`, 2 epochs, 998 balanced videos, 2 frames each); the epoch-2 checkpoint became `models/deepfake_shield_video_v1.pt` ([details](#stage-1-frame-encoder-fine-tuning)) |
+| 2026-09-15 | `7e5c300` | **Trained checkpoint integrated**: real video inference through the web UI (model v1: 2 frames, threshold 0.5) |
 | 2026-10-24 | `74d8764` | **Frame-level explainability**: Grad-CAM, frame JPEGs, face boxes, artifact endpoint |
 | 2026-10-26 | `455216a`, `2647e3f` | **D1–D3 fixed** (inference lock, catch-all failure handling, cleanup) and a traceable evaluation pipeline (`scripts/evaluate_full.py`) |
 | 2026-10-26 | `308ead1`, `2522214` | Baseline ablation recorded against a clean commit: 16 frames beat 2 on every test metric |
@@ -71,7 +75,9 @@ _Status as of 2026-10-28, branch `review-hybrid`._
 | 2026-10-26 | `2799041`, `e801b5a` | Hybrid pipeline: embedding extraction, Colab bundle, head training notebook |
 | 2026-10-28 | `f9312a8` | **Hybrid model served**: MLP head by default, Transformer and baseline selectable (`DEEPFAKE_MODEL`) |
 | 2026-10-28 | `f9866a1` | Ablation table with Colab and served re-score rows |
-| 2026-10-28 | _this commit_ | Documentation updated (this README, technical documentation, viva guide) |
+| 2026-10-28 | `cd0622e` | Documentation updated (README, technical documentation, viva guide) |
+| 2026-10-28 | `e88dc12` | Verdict panel shows the video-level score against the decision threshold; status and coverage UI fixes |
+| 2026-10-30 | _this commit_ | Headline number relabelled **Fake score**; near-zero scores shown as `<0.1%` / `<0.001` instead of `0.0%`; encoder training run recorded; README adds the model comparison and algorithm |
 
 ---
 
@@ -87,6 +93,7 @@ _Status as of 2026-10-28, branch `review-hybrid`._
 | Health endpoint reporting the active model and threshold (`degraded` if a checkpoint is missing) | ✅ Complete | `GET /health` |
 | Dataset audit and leakage-checked splits | ✅ Complete | `ml/data/`, `artifacts/splits/` |
 | Traceable evaluation (`metrics.json`, cached predictions, ROC/PR/confusion plots) and ablation table | ✅ Complete | `scripts/evaluate_full.py`, `scripts/make_ablation_table.py`, `artifacts/evaluations/` |
+| Frame-encoder fine-tuning on Colab (recorded run) | ✅ Complete | `scripts/train_baseline.py`, `ml/training/model_training_deepfake.ipynb` |
 | Embedding extraction and head training on Colab | ✅ Complete | `scripts/extract_embeddings.py`, `notebooks/hybrid_temporal_colab.ipynb` |
 | Served-vs-Colab parity check | ✅ Complete | `scripts/check_head_parity.py` |
 | Investigations history | 🟡 Partial: in memory, lost on restart | `backend/app/services/repository.py` |
@@ -101,17 +108,50 @@ _Status as of 2026-10-28, branch `review-hybrid`._
 | Item | Value |
 | --- | --- |
 | Design | **Two-stage hybrid**: frozen CNN frame encoder → learned video-level head |
-| Stage 1: frame encoder | EfficientNet-B0 (ImageNet-pretrained, fine-tuned for real/fake frames), `models/deepfake_shield_video_v1.pt`, frozen; embedding = `avgpool(features(x))` → 1280-d per face crop |
+| Stage 1: frame encoder | EfficientNet-B0 (ImageNet-pretrained, fine-tuned for real/fake frames for 2 epochs on 998 balanced training videos; see [Stage 1](#stage-1-frame-encoder-fine-tuning)), `models/deepfake_shield_video_v1.pt` (15.6 MB), frozen; embedding = `avgpool(features(x))` → 1280-d per face crop |
 | Stage 2: default head (`mlp`) | Masked mean of the 16 frame embeddings → LayerNorm → Linear(1280→256) → GELU → Dropout(0.2) → Linear(256→2); `models/deepfake_shield_meanpool_mlp_v1.pt` (1.3 MB) |
 | Stage 2: alternative head (`temporal`) | LayerNorm + Linear(1280→256), learnable positions, 2-layer pre-norm Transformer encoder (4 heads), masked mean pooling, LayerNorm → Dropout → Linear(256→2); `models/deepfake_shield_temporal_v1.pt` (7.7 MB) |
 | Input | 16 evenly spaced frames; largest Haar-cascade face per frame with a 20% margin; RGB `224×224`, ImageNet normalization; frames with no face are masked out |
-| Video score | Head softmax fake probability; verdict `FAKE` at or above the head checkpoint's stored threshold |
+| Video score | Head softmax fake probability, shown in the UI as the **Fake score** (0% = no manipulation signal); verdict `FAKE` at or above the head checkpoint's stored threshold. Scores that round to 0 or 100 are shown as `<0.1%` / `>99.9%` |
 | Decision thresholds | MLP **0.9993**, Transformer **0.8795**, baseline **0.3654** (all Youden's J on the validation split) |
 | Frame-level evidence | Each frame's score comes from the frame encoder's own classifier and is flagged at **0.3654**; the video verdict comes from the head |
 | Explainability | Grad-CAM on `features[-1]` of the frame encoder, fake-class logit |
 | Device | CUDA when available, otherwise CPU |
 | Speed (16 frames + Grad-CAM, median of 5) | About the same in every mode, because the head adds only 0.05 ms (MLP) or 1.1 ms (Transformer): baseline 3.9 s CPU / 0.6 s MPS measured plugged in (2026-10-26); on battery with Low Power Mode (2026-10-28) all modes took 7.0–8.9 s CPU / 1.2–1.3 s MPS. The server itself uses CUDA or CPU, not MPS |
 | Configuration | `DEEPFAKE_MODEL` = `mlp` (default) \| `temporal` \| `baseline`; `DEEPFAKE_THRESHOLD` overrides the stored threshold; invalid values stop the server at startup |
+
+---
+
+## Previous models vs current model
+
+The served model went through three versions. **All three use the same fine-tuned EfficientNet-B0 weights**; what changed is how many frames are read and how the frame information becomes one video decision. All numbers below are from the local served pipeline on the same 902-video test split, so they compare like with like.
+
+| | **v1: first served model** | **v2: tuned baseline** | **v3: hybrid (current)** |
+| --- | --- | --- | --- |
+| Served from | 2026-09-15 (`7e5c300`) | 2026-10-26 (`3693e68`) | 2026-10-28 (`f9312a8`) |
+| Algorithm | Frame classifier, mean fake probability | Frame classifier, mean fake probability | Frozen frame encoder → 1280-d embeddings → learned MLP head |
+| Frames per video | 2 | 16 | 16 |
+| How frames are combined | Hand-written average of probabilities | Hand-written average of probabilities | **Learned**: mean of embeddings, then a trained classifier |
+| Decision threshold | 0.5 (default, not tuned) | 0.3654 (Youden's J on val) | 0.9993 (Youden's J on val) |
+| Trained parameters | Encoder only | Encoder only | Encoder (frozen) + head (~330 k parameters) |
+| Model files | 15.6 MB | 15.6 MB | 15.6 MB + 1.3 MB head |
+| **Test ROC-AUC** | 83.17% | 88.13% | **98.73%** |
+| **Balanced accuracy** | 70.24% | 79.75% | **94.17%** |
+| Real recall (real videos kept) | 88.79% | 86.92% | **96.26%** |
+| Fake recall (fakes caught) | 51.70% | 72.58% | **92.08%** |
+| Fakes missed per 100 | ~48 | ~27 | **~8** |
+| Accuracy | 56.11% | 74.28% | 92.57% |
+| PR-AUC | 96.68% | 97.89% | 99.81% |
+| CPU time per video (with Grad-CAM) | ~0.5 s | ~3.9 s | ~3.9 s (head adds 0.05 ms) |
+| Explainability | none at first (Grad-CAM added 2026-10-24) | per-frame Grad-CAM | per-frame Grad-CAM (explains frame scores, not the head) |
+| Score scale | moderate | moderate | saturated near 0 and 1, uncalibrated |
+
+**What changed and why**
+
+- **v1 → v2: more frames, tuned threshold.** Reading 16 frames instead of 2 and choosing the threshold on validation raised ROC-AUC by 5.0 points and balanced accuracy by 9.5 points. The weights did not change.
+- **v2 → v3: learned aggregation.** Instead of averaging 16 frame probabilities, the head learns a video-level decision from the 1280-d embeddings. ROC-AUC rose by 10.6 points, balanced accuracy by 14.4, and the share of fakes caught went from 72.6% to 92.1% while more real videos were kept (86.9% → 96.3%).
+- **The cost of v3** is the score scale. Head scores cluster near 0 or 1, so the threshold is 0.9993, and a real video can score 0.000005 (shown as `<0.1%`). The scores rank videos well but are not probabilities; see [Known limitations](#known-limitations).
+- **Alternative head kept selectable:** the Transformer head (`DEEPFAKE_MODEL=temporal`) reaches 97.71% ROC-AUC and 91.81% balanced accuracy; it was not chosen because the simpler MLP is better and smaller.
 
 ---
 
@@ -143,7 +183,40 @@ Test split: **902 videos (107 real, 795 fake)**. Thresholds are tuned on validat
 
 ---
 
-## How the hybrid model was trained
+## How the models were trained
+
+Training has two stages. Stage 1 teaches EfficientNet-B0 to tell real face crops from fake ones; Stage 2 freezes it and trains a small video-level head on its embeddings.
+
+### Stage 1: frame encoder fine-tuning
+
+Run on 2026-09-15 on a Colab Tesla T4 (PyTorch 2.11, CUDA 12.8). The full record, including the failed attempts, is [`ml/training/model_training_deepfake.ipynb`](ml/training/model_training_deepfake.ipynb). The served checkpoint was verified against it: the validation metrics stored inside `models/deepfake_shield_video_v1.pt` (epoch 2, ROC-AUC 0.8231) match the notebook's `submission_final` run to every digit.
+
+| Setting | Value |
+| --- | --- |
+| Script | `scripts/train_baseline.py` (output `artifacts/experiments/submission_final/best_model.pt`, copied to `models/deepfake_shield_video_v1.pt`) |
+| Initialisation | torchvision EfficientNet-B0, ImageNet weights; classifier replaced by Dropout(0.3) → Linear(1280→2) |
+| Training videos | **998 of 4,207**, class-balanced with `--limit 1000`: all 498 real training videos + the first 500 fake videos in CSV order (not a random sample) |
+| Validation videos | all 902 (the limit is larger than the split, so it is not subsampled) |
+| Frames per video | 2, evenly spaced; largest Haar face with 20% margin (whole frame if no face) |
+| Preprocessing | Resize 224×224, ImageNet normalisation; **no augmentation** |
+| Optimizer / loss | AdamW, lr 1e-4, weight decay 1e-4; unweighted cross-entropy |
+| Batch / epochs / seed | 16 / 2 / 42 |
+| Checkpoint selection | epoch with the best validation ROC-AUC (epoch 2) |
+
+| Epoch | Train loss | Train acc. | Train ROC-AUC | Val loss | Val acc. (at 0.5) | Val ROC-AUC |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 0.506 | 78.56% | 86.68% | 0.794 | 54.10% | 79.21% |
+| **2** | 0.233 | 92.18% | 97.17% | 0.886 | 59.53% | **82.31%** |
+
+Test result in the notebook (`scripts/evaluate_baseline.py`, all 902 test videos, 2 frames, threshold 0.5): **ROC-AUC 83.01%**, PR-AUC 96.79%, accuracy 55.43%, real recall 89.72%, fake recall 50.82%. The later local re-evaluation through the serving pipeline gave 83.17% ROC-AUC (model v1 above), so the result reproduces.
+
+What the run shows:
+
+- **Overfitting already at epoch 2.** Training loss halves while validation loss rises; training ROC-AUC (97%) is far above validation (82%).
+- **Uneven class behaviour at 0.5.** On the imbalanced validation set the encoder misses about half of the fakes at the default threshold, which is why thresholds are tuned on validation later.
+- **Attempts that did not finish.** A full-data run (`submission_v1`: 5 epochs, 4 frames, all 4,207 videos) and a first 1,000-video run (`submission_fast`) were interrupted on Colab; a 100-video sanity run reached only 63% test ROC-AUC. The notebook also patched Mac-specific CSV paths and the dataset loader in the Colab copy to make training run there.
+
+### Stage 2: video-level heads on frozen embeddings
 
 1. **Embeddings extracted once** on a Colab T4: all 6,011 labelled videos × 16 frames, using exactly the serving preprocessing (`scripts/extract_embeddings.py`, ~3.5 h). Sanity check: the 16-frame mean-probability test ROC-AUC from the Colab embeddings was 0.8819 vs 0.8813 locally.
 2. **Heads trained on the frozen embeddings** (the encoder never changes), with the actual configuration stored in both checkpoints:
@@ -165,6 +238,52 @@ Test split: **902 videos (107 real, 795 fake)**. Thresholds are tuned on validat
 ![Transformer training curves](artifacts/evaluations/hybrid_colab/training_curves.png)
 ![ROC comparison](artifacts/evaluations/hybrid_colab/roc_comparison.png)
 ![Hybrid confusion matrix](artifacts/evaluations/hybrid_colab/confusion_matrix_hybrid.png)
+
+---
+
+## Algorithm
+
+### Inference (served, `DEEPFAKE_MODEL=mlp`)
+
+```text
+Input: video V
+1. Pick 16 frame indices evenly spaced over V (linspace).
+2. For each frame t:
+     detect the largest face with the OpenCV Haar cascade, pad it by 20%;
+     if no face: mark slot t as empty (masked out) and continue;
+     x_t = normalize(resize_224(RGB(face crop)))          # ImageNet mean/std
+     h_t = avgpool(EfficientNetB0.features(x_t))          # 1280-d embedding (frozen encoder)
+     s_t = softmax(classifier(h_t))[fake]                 # frame score, for evidence only
+     G_t = Grad-CAM of the fake logit at features[-1]     # heatmap, for evidence only
+3. If no slot has a face: fail the analysis (no fabricated result).
+4. e = mean of h_t over the non-empty slots              # masked mean pooling
+5. p = softmax( W2 · Dropout(GELU( W1 · LayerNorm(e) + b1 )) + b2 )[fake]
+6. verdict = FAKE if p ≥ τ else REAL, with τ = 0.9993 stored in the head checkpoint
+7. Flag frame t as suspicious if s_t ≥ 0.3654 (the frame classifier's own threshold).
+Output: verdict, video-level fake score p, per-frame s_t, face boxes, frame and heatmap JPEGs
+```
+
+One backbone pass per frame produces the embedding, the frame score and the Grad-CAM map. The head is the only part that sees the whole video.
+
+### Training
+
+```text
+Stage 1 (encoder):   minimise cross-entropy(EfficientNetB0(x_t), y_video) over face crops,
+                     AdamW, 2 epochs; keep the epoch with the best val ROC-AUC; then freeze.
+Stage 2 (head):      for every labelled video store H = [h_1 … h_16] and a face mask, once.
+                     Train the head on H with class-weighted cross-entropy, AdamW + cosine LR,
+                     frame dropout 0.25 (randomly hide frames), up to 100 epochs;
+                     keep the epoch with the best inner-val ROC-AUC.
+Threshold:           τ = argmax over thresholds of (TPR − FPR) on the validation split (Youden's J).
+Reporting:           test split only, never used for any choice above.
+```
+
+### Why this design
+
+- **Frozen encoder + small head.** Extracting embeddings once (≈3.5 h) makes each head experiment take minutes instead of re-decoding 6,011 videos, and the head has ~330 k parameters instead of ~4 M, which suits a training set with only 498 real videos.
+- **Mean pooling instead of a Transformer.** The 16 frames are about 1 s apart, so there is little short-range motion to model; the order-free MLP matched or beat the Transformer head (see [Results](#results-and-ablation)).
+- **Youden's J threshold.** The data is ~88% fake, so 0.5 or plain accuracy would favour "fake"; Youden's J balances real and fake recall.
+- **Grad-CAM on the frame classifier.** It is the only part of the pipeline with spatial feature maps, so it is where a visual explanation can come from.
 
 ---
 
@@ -223,7 +342,7 @@ Captured on 2026-10-28 from the live app (default MLP mode) for one real (`Celeb
 | Frame inspector | [`real_inspector.png`](docs/screenshots/real_inspector.png) | [`fake_inspector.png`](docs/screenshots/fake_inspector.png) |
 | Report | [`real_report.png`](docs/screenshots/real_report.png) | [`fake_report.png`](docs/screenshots/fake_report.png) |
 
-The verdict panel shows the video-level score next to the head's decision threshold, with the note that scores are not calibrated probabilities. Scores of 0.9995 or more show as ">99.9%". (The embedded video player is blank in headless captures; frames and heatmaps are real.)
+The verdict panel shows the video-level score next to the head's decision threshold, with the note that scores are not calibrated probabilities. Scores of 0.9995 or more show as ">99.9%". Since 2026-10-30 the headline number is labelled **Fake score** (with the hint "0% = no manipulation signal · 100% = strong" under the ring), and a non-zero score below 0.05% shows as `<0.1%` (`<0.001` on the 0–1 scale) instead of a misleading `0.0%`; these screenshots predate that and still read "Model score". (The embedded video player is blank in headless captures; frames and heatmaps are real.)
 
 ---
 
@@ -254,7 +373,8 @@ deep-fake/
 ├── frontend/                    React + TanStack Start app
 ├── ml/
 │   ├── data/                    discovery, splits, frame sampling, face cropping
-│   └── models/                  efficientnet_baseline.py, video_heads.py, temporal_transformer.py
+│   ├── models/                  efficientnet_baseline.py, video_heads.py, temporal_transformer.py
+│   └── training/                model_training_deepfake.ipynb (Stage 1 Colab run), legacy train_efficientnet.py
 ├── scripts/                     evaluate_full, extract_embeddings, train_temporal_embeddings,
 │                                make_ablation_table, check_head_parity, package_for_colab, ...
 ├── notebooks/                   hybrid_temporal_colab.ipynb
@@ -346,9 +466,9 @@ The analysis response shape is unchanged across serving modes.
 
 | Check | Result | Last run |
 | --- | --- | --- |
-| Backend tests (`cd backend && python -m pytest -q`) | ✅ **31 passed** | 2026-10-28 |
-| TypeScript (`npx tsc --noEmit`) | ✅ 0 errors | 2026-10-28 |
-| ESLint (`npm run lint`) | ✅ 0 errors, ⚠️ 10 warnings (`react-refresh/only-export-components`) | 2026-10-28 |
+| Backend tests (`cd backend && python -m pytest -q`) | ✅ **31 passed** | 2026-10-30 |
+| TypeScript (`npx tsc --noEmit`) | ✅ 0 errors | 2026-10-30 |
+| ESLint (`npm run lint`) | ✅ 0 errors, ⚠️ 10 warnings (`react-refresh/only-export-components`) | 2026-10-30 |
 | 4-thread concurrency test | ✅ identical scores | 2026-10-28 |
 | Served pipeline vs Colab test metrics (902 videos) | ✅ ROC-AUC within 0.15 points of Colab for both heads (MLP 98.71 vs 98.86, Transformer 97.71 vs 97.83) | 2026-10-28 |
 | Real-video upload through the API (`TestClient`, default MLP mode) | ✅ completed, artifacts served | 2026-10-28 |
@@ -377,7 +497,8 @@ Other risks: no authentication, `torch.load(weights_only=False)` on checkpoint p
 ## Known limitations
 
 - **Uncalibrated, overconfident heads.** The val-tuned thresholds are 0.8795 (Transformer) and 0.9993 (MLP), so a "fake probability" of 0.99 can still mean *real*. Temperature scaling on validation would fix the scale without changing the ranking.
-- **The frame encoder was fine-tuned on only ~1,000 of the 4,207 training videos** (inferred from the checkpoint metadata; the run is not recorded), then frozen.
+- **The frame encoder was fine-tuned on only 998 of the 4,207 training videos** (all 498 real + the first 500 fake, 2 frames each, 2 epochs, no augmentation; recorded in [`ml/training/model_training_deepfake.ipynb`](ml/training/model_training_deepfake.ipynb)), then frozen. It was already overfitting at epoch 2; the full-data run never finished.
+- **The validation split is reused**: it picked the encoder's epoch and tunes every threshold. The test split stays untouched, so test numbers remain fair, but validation numbers are optimistic.
 - **Splits are by file, not identity.** Celeb-DF reuses the same celebrities across videos, so identity leakage between train and test is possible and the scores may be optimistic.
 - **Small real class:** 107 real test videos.
 - **One dataset family** (Celeb-DF style); cross-dataset generalization is untested.
@@ -447,3 +568,4 @@ Related public datasets: [Celeb-DF](https://github.com/yuezunli/celeb-deepfakefo
 | [`PROJECT_REVIEW_AND_VIVA_GUIDE.md`](PROJECT_REVIEW_AND_VIVA_GUIDE.md) | Review and viva preparation, likely questions and answers |
 | [`artifacts/evaluations/ablation_table.md`](artifacts/evaluations/ablation_table.md) | Every evaluated run on the test split |
 | [`artifacts/evaluations/hybrid_colab/`](artifacts/evaluations/hybrid_colab/) | Colab metrics, training history and plots for the heads |
+| [`ml/training/model_training_deepfake.ipynb`](ml/training/model_training_deepfake.ipynb) | Stage 1 Colab run: frame-encoder fine-tuning, epoch metrics, test evaluation |

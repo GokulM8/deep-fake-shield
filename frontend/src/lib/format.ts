@@ -1,18 +1,23 @@
 import type { EvidenceSignal, VideoDecision } from "./types";
 
 /**
- * Score formatting. The hybrid heads saturate near 1, so anything that would round to 100.0%
- * is shown as ">99.9%" rather than implying certainty.
+ * Score formatting. The hybrid heads saturate near 0 and 1, so anything that would round to
+ * 100.0% is shown as ">99.9%" rather than implying certainty, and a non-zero score that would
+ * round to 0.0% is shown as "<0.1%" rather than looking absent.
  */
 
 /** A 0–100 model score as a percentage with one decimal. */
 export function formatPercent(score: number): string {
-  return score >= 99.95 ? ">99.9%" : `${score.toFixed(1)}%`;
+  if (score >= 99.95) return ">99.9%";
+  if (score > 0 && score < 0.05) return "<0.1%";
+  return `${score.toFixed(1)}%`;
 }
 
 /** A 0–1 model score or threshold with three decimals. */
 export function formatScore(score: number): string {
-  return score >= 0.9995 ? ">0.999" : score.toFixed(3);
+  if (score >= 0.9995) return ">0.999";
+  if (score > 0 && score < 0.0005) return "<0.001";
+  return score.toFixed(3);
 }
 
 export const UNCALIBRATED_NOTE = "Scores are not calibrated probabilities.";
