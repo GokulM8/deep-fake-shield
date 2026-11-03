@@ -15,6 +15,8 @@ export const Route = createFileRoute("/investigations")({
       { property: "og:description", content: "Review previously analyzed media and verdicts." },
     ],
   }),
+  // The history may come from this browser's localStorage, so render it on the client only.
+  ssr: false,
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(investigationsQuery());
   },
@@ -28,13 +30,19 @@ function verdictClass(verdict: Verdict) {
 }
 
 function InvestigationsPage() {
-  const { data } = useSuspenseQuery(investigationsQuery());
+  const {
+    data: { items, scope },
+  } = useSuspenseQuery(investigationsQuery());
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
       <p className="label-caps">Case history</p>
       <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Investigations</h1>
-      <p className="mt-3 text-sm text-muted-foreground">Previously analyzed media.</p>
+      <p className="mt-3 text-sm text-muted-foreground">
+        {scope === "browser"
+          ? "Analyses submitted from this browser that the server still keeps. Results are deleted from the server after a while."
+          : "Previously analyzed media."}
+      </p>
 
       <Panel className="mt-8 overflow-hidden">
         <div className="hidden grid-cols-[160px_minmax(0,1fr)_90px_170px_110px_150px] gap-4 border-b border-border px-5 py-3 lg:grid">
@@ -46,7 +54,10 @@ function InvestigationsPage() {
         </div>
 
         <div className="divide-y divide-border/70">
-          {data.map((item) => (
+          {items.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-muted-foreground">No analyses yet.</p>
+          ) : null}
+          {items.map((item) => (
             <Link
               key={item.id}
               to="/analysis/$id"

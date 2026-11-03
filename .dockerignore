@@ -1,0 +1,12 @@
+# Whitelist: the image only needs these paths (keeps datasets, venvs and zips out of the build context).
+*
+!backend/app/**
+!backend/requirements-deploy.txt
+!ml/data/video_dataset.py
+!ml/models/efficientnet_baseline.py
+!ml/models/video_heads.py
+!models/deepfake_shield_video_v1.pt
+!models/deepfake_shield_meanpool_mlp_v1.pt
+!models/deepfake_shield_temporal_v1.pt
+**/__pycache__
+**/._*

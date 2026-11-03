@@ -1,0 +1,9 @@
+# Runtime dependencies for the container image (no test tooling, headless OpenCV).
+# torch and torchvision are installed separately from the CPU-only wheel index; see backend/Dockerfile.
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+python-multipart>=0.0.9,<1
+pydantic>=2.8,<3
+numpy>=1.26,<3
+Pillow>=10.4,<12
+opencv-python-headless>=4.10,<5

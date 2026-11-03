@@ -1,0 +1,22 @@
+# Upload only what backend/Dockerfile needs to Cloud Build (datasets and zips are several GB).
+# gcloud reads this file; Docker inside Cloud Build then applies .dockerignore as well.
+/*
+!/backend/
+/backend/*
+!/backend/app/
+!/backend/requirements-deploy.txt
+!/backend/Dockerfile
+!/ml/
+/ml/*
+!/ml/data/
+/ml/data/*
+!/ml/data/video_dataset.py
+!/ml/models/
+/ml/models/*
+!/ml/models/efficientnet_baseline.py
+!/ml/models/video_heads.py
+!/models/
+!/cloudbuild.yaml
+!/.dockerignore
+__pycache__/
+._*

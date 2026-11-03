@@ -86,3 +86,6 @@ class HealthResponse(BaseModel):
     inference_mode: str
     model: str
     decision_threshold: float | None
+    max_upload_bytes: int
+    retention_seconds: int
+    sync_analysis: bool

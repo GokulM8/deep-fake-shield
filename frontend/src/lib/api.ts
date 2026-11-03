@@ -23,6 +23,8 @@ export interface AnalyzeMediaInput {
   filename: string;
   mediaType: MediaType;
   sizeBytes: number;
+  /** The server's upload limit from GET /health, when known. */
+  maxUploadBytes?: number;
 }
 
 export interface AnalyzeMediaResponse {
@@ -89,6 +91,68 @@ export interface HealthStatus {
   inference_mode: string;
   model: string;
   decision_threshold: number | null;
+  max_upload_bytes?: number;
+  retention_seconds?: number;
+  sync_analysis?: boolean;
+}
+
+/** Matches the backend default; the live value comes from GET /health. */
+export const DEFAULT_MAX_UPLOAD_BYTES = 32_000_000;
+/** Matches the backend default RETENTION_SECONDS. */
+export const DEFAULT_RETENTION_SECONDS = 3600;
+
+/** A backend error with its HTTP status, the server's message and Retry-After (seconds), if any. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly retryAfterSeconds: number | null = null,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+function waitText(seconds: number | null): string {
+  if (!seconds) return "later";
+  if (seconds < 90) return `in ${seconds} seconds`;
+  return `in about ${Math.ceil(seconds / 60)} minutes`;
+}
+
+/** A message a user can act on, for the statuses the deployed backend returns on purpose. */
+function errorMessage(status: number, detail: string | null, retryAfter: number | null): string {
+  if (status === 413) return detail ?? "The file is too large for this server.";
+  if (status === 429) return `Upload limit reached for now. Try again ${waitText(retryAfter)}.`;
+  if (status === 503)
+    return `The server is busy analyzing another video. Try again ${waitText(retryAfter)}.`;
+  if (status === 415) return detail ?? "This file type is not supported.";
+  return detail ?? `Backend request failed (${status})`;
+}
+
+const MY_ANALYSES_KEY = "dfs:my-analyses";
+const MY_ANALYSES_LIMIT = 20;
+
+/** IDs of analyses submitted from this browser, newest first (the server history is private). */
+function myAnalysisIds(): string[] {
+  try {
+    const raw = window.localStorage.getItem(MY_ANALYSES_KEY);
+    const ids: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberAnalysis(id: string): void {
+  try {
+    const ids = [id, ...myAnalysisIds().filter((known) => known !== id)].slice(
+      0,
+      MY_ANALYSES_LIMIT,
+    );
+    window.localStorage.setItem(MY_ANALYSES_KEY, JSON.stringify(ids));
+  } catch {
+    // Storage can be unavailable (private mode); history then just stays empty.
+  }
 }
 
 const COVERAGE_SIGNAL = "Face frame coverage";
@@ -284,9 +348,39 @@ function toAnalysis(record: BackendRecord): Analysis {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, init);
-  if (!response.ok) throw new Error(`Backend request failed (${response.status})`);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, init);
+  } catch {
+    throw new ApiError(
+      "Cannot reach the analysis server. It may still be starting up; try again in a moment.",
+      0,
+    );
+  }
+  if (!response.ok) {
+    let detail: string | null = null;
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body.detail === "string") detail = body.detail;
+    } catch {
+      // Non-JSON error body (e.g. a proxy page); fall back to the status message.
+    }
+    const retryHeader = Number(response.headers.get("Retry-After"));
+    const retryAfter = Number.isFinite(retryHeader) && retryHeader > 0 ? retryHeader : null;
+    throw new ApiError(
+      errorMessage(response.status, detail, retryAfter),
+      response.status,
+      retryAfter,
+    );
+  }
   return response.json() as Promise<T>;
+}
+
+/** Why ``file`` cannot be uploaded, or null. Checked before upload: the hosting proxy rejects
+ * oversized bodies before the API, without CORS headers, so the browser would only see a network error. */
+export function uploadSizeError(file: File, maxBytes = DEFAULT_MAX_UPLOAD_BYTES): string | null {
+  if (file.size <= maxBytes) return null;
+  return `This file is ${(file.size / 1_000_000).toFixed(1)} MB; the limit is ${(maxBytes / 1_000_000).toFixed(0)} MB. Trim or compress the video and try again.`;
 }
 
 /** POST /api/v1/analyze */
@@ -296,14 +390,19 @@ export async function analyzeMedia(input: AnalyzeMediaInput): Promise<AnalyzeMed
     return { analysisId, status: "processing" };
   }
   if (!input.file) throw new Error("A media file is required for backend analysis");
+  const sizeError = uploadSizeError(input.file, input.maxUploadBytes);
+  if (sizeError) throw new ApiError(sizeError, 413);
   const form = new FormData();
   form.append("file", input.file, input.filename);
   const record = await request<{ analysis_id: string; status: "processing" }>("/api/v1/analyze", {
     method: "POST",
     body: form,
   });
-  if (typeof window !== "undefined")
-    window.sessionStorage.setItem(`dfs:submitted:${record.analysis_id}`, JSON.stringify(input));
+  if (typeof window !== "undefined") {
+    const { file: _file, ...summary } = input;
+    window.sessionStorage.setItem(`dfs:submitted:${record.analysis_id}`, JSON.stringify(summary));
+    rememberAnalysis(record.analysis_id);
+  }
   if (input.file.type.startsWith("video/") || input.file.type.startsWith("image/")) {
     uploadedMediaUrls.set(record.analysis_id, URL.createObjectURL(input.file));
   }
@@ -333,11 +432,40 @@ export async function getReport(id: string): Promise<Analysis> {
   return getAnalysis(id);
 }
 
-/** GET /api/v1/analyze (history) */
-export async function listInvestigations(): Promise<AnalysisSummary[]> {
-  if (USING_MOCK_DATA) return MOCK_INVESTIGATIONS;
-  const records = await request<BackendRecord[]>("/api/v1/analyze");
-  return records.map((record) => {
+export interface InvestigationList {
+  items: AnalysisSummary[];
+  /** "server": the full history; "browser": the server history is private, so only this browser's analyses. */
+  scope: "server" | "browser";
+}
+
+/** Records for the analyses this browser submitted that the server still keeps. */
+async function myRecords(): Promise<BackendRecord[]> {
+  const records = await Promise.all(
+    myAnalysisIds().map((id) =>
+      request<BackendRecord>(`/api/v1/analyze/${encodeURIComponent(id)}`).catch(
+        (error: unknown) => {
+          if (error instanceof ApiError && error.status === 404) return null; // expired on the server
+          throw error;
+        },
+      ),
+    ),
+  );
+  return records.filter((record): record is BackendRecord => record !== null);
+}
+
+/** GET /api/v1/analyze (history); falls back to this browser's analyses when the history is private. */
+export async function listInvestigations(): Promise<InvestigationList> {
+  if (USING_MOCK_DATA) return { items: MOCK_INVESTIGATIONS, scope: "server" };
+  let records: BackendRecord[];
+  let scope: InvestigationList["scope"] = "server";
+  try {
+    records = await request<BackendRecord[]>("/api/v1/analyze");
+  } catch (error) {
+    if (!(error instanceof ApiError && error.status === 401)) throw error;
+    records = await myRecords();
+    scope = "browser";
+  }
+  const items = records.map((record) => {
     const analysis = toAnalysis(record);
     return {
       id: analysis.id,
@@ -349,6 +477,7 @@ export async function listInvestigations(): Promise<AnalysisSummary[]> {
       status: analysis.status,
     };
   });
+  return { items, scope };
 }
 
 export const analysisQuery = (id: string) => ({

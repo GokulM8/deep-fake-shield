@@ -16,7 +16,7 @@ The API is available at `http://127.0.0.1:8000`. Interactive OpenAPI docs are at
 
 ## Endpoints
 
-- `POST /api/v1/analyze` accepts image, video, and audio uploads up to 100 MB.
+- `POST /api/v1/analyze` accepts image, video, and audio uploads up to 32 MB by default (`DEEPFAKE_SHIELD_MAX_UPLOAD_BYTES`). Deployment settings: see `../DEPLOYMENT.md`.
 - `GET /api/v1/analyze/{analysis_id}` returns job status and the completed assessment.
 - `GET /api/v1/analyze/{analysis_id}/evidence` returns individual evidence signals.
 - `GET /api/v1/analyze/{analysis_id}/report` returns the report payload.

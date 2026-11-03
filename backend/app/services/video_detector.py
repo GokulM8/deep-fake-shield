@@ -193,6 +193,8 @@ class VideoDetector:
         state_dict = checkpoint.get("model_state_dict", checkpoint)
         model.load_state_dict(state_dict)
         model.eval()
+        # Serving never trains: frozen weights keep autograd from recording the backbone (see Grad-CAM).
+        model.requires_grad_(False)
         return model
 
     def predict(self, video_path: Path, artifact_dir: Path | None = None) -> dict[str, Any]:
@@ -281,16 +283,20 @@ class VideoDetector:
         frame_logits = frame_logits or self.model
         captured: dict[str, torch.Tensor] = {}
 
-        def keep_activation(_module: torch.nn.Module, _inputs: Any, output: torch.Tensor) -> None:
-            output.retain_grad()
-            captured["activation"] = output
+        def keep_activation(_module: torch.nn.Module, _inputs: Any, output: torch.Tensor) -> torch.Tensor:
+            # With frozen weights nothing before this point requires grad, so autograd keeps no backbone
+            # activations; the graph starts here and only avgpool + classifier are recorded. The gradient
+            # w.r.t. this activation is the same as with a full graph, at a fraction of the memory.
+            leaf = output.detach().requires_grad_(True)
+            captured["activation"] = leaf
+            return leaf
 
         handle = self.model.features[-1].register_forward_hook(keep_activation)
         try:
-            logits = frame_logits(batch)
-            self.model.zero_grad(set_to_none=True)
-            # Eval-mode BatchNorm keeps samples independent, so one backward pass gives each its own map.
-            logits[:, 1].sum().backward()
+            with torch.enable_grad():
+                logits = frame_logits(batch)
+                # Eval-mode BatchNorm keeps samples independent, so one backward pass gives each its own map.
+                logits[:, 1].sum().backward()
         finally:
             handle.remove()
 

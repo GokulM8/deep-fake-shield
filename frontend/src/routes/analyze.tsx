@@ -1,7 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { FileImage, FileVideo, ShieldAlert, Sparkles } from "lucide-react";
 import { useState } from "react";
-import { analyzeMedia, USING_MOCK_DATA } from "@/lib/api";
+import { analyzeMedia, uploadSizeError, USING_MOCK_DATA } from "@/lib/api";
+import { useBackendWake } from "@/hooks/use-backend-wake";
+import { WakeBanner } from "@/components/common/WakeBanner";
+import { PrivacyNotice } from "@/components/common/PrivacyNotice";
 import { MOCK_ANALYSES } from "@/lib/mockData";
 import type { MediaType } from "@/lib/types";
 import { DropZone } from "@/components/upload/DropZone";
@@ -43,9 +46,23 @@ function AnalyzePage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const backend = useBackendWake();
+  const maxUploadBytes = backend.health?.max_upload_bytes;
+
+  function chooseFile(next: File | null) {
+    setFile(next);
+    setError(next && !USING_MOCK_DATA ? uploadSizeError(next, maxUploadBytes) : null);
+  }
 
   async function handleAnalyze() {
     if (!file) return;
+    if (!USING_MOCK_DATA) {
+      const sizeError = uploadSizeError(file, maxUploadBytes);
+      if (sizeError) {
+        setError(sizeError);
+        return;
+      }
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -54,6 +71,7 @@ function AnalyzePage() {
         filename: file.name,
         mediaType: detectMediaType(file),
         sizeBytes: file.size,
+        ...(maxUploadBytes ? { maxUploadBytes } : {}),
       });
       navigate({ to: "/analysis/$id/processing", params: { id: analysisId } });
     } catch (submissionError) {
@@ -86,12 +104,12 @@ function AnalyzePage() {
       </div>
 
       <div className="mt-8 space-y-6">
-        {USING_MOCK_DATA ? <MockBanner /> : null}
+        {USING_MOCK_DATA ? <MockBanner /> : <WakeBanner state={backend.state} />}
 
         {file ? (
-          <FilePreview file={file} onRemove={() => setFile(null)} onAnalyze={handleAnalyze} />
+          <FilePreview file={file} onRemove={() => chooseFile(null)} onAnalyze={handleAnalyze} />
         ) : (
-          <DropZone onFile={setFile} />
+          <DropZone onFile={chooseFile} />
         )}
 
         {!file && USING_MOCK_DATA ? (
@@ -150,10 +168,24 @@ function AnalyzePage() {
         ) : null}
 
         {submitting ? (
-          <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
-            <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
+          <div className="space-y-2">
+            <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+              <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
+            </div>
+            <p className="text-xs text-muted-foreground" role="status">
+              {backend.state === "waking"
+                ? "Waking up the server, then uploading and analyzing…"
+                : "Uploading and analyzing…"}
+            </p>
           </div>
         ) : null}
+
+        {USING_MOCK_DATA ? null : (
+          <PrivacyNotice
+            retentionSeconds={backend.health?.retention_seconds}
+            maxUploadBytes={maxUploadBytes}
+          />
+        )}
 
         <div className="flex items-start gap-2.5 rounded-md border border-border bg-panel px-4 py-3">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />

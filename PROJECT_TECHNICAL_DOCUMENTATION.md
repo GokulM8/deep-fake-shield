@@ -78,7 +78,7 @@ The system has three parts:
 
 | | Detail |
 | --- | --- |
-| Input | One file per request through `POST /api/v1/analyze`. Video: `.mp4 .mov .avi .webm`. Image: `.jpg .jpeg .png .webp`. Audio: `.wav .mp3 .flac .m4a`. Limit 100 MB. |
+| Input | One file per request through `POST /api/v1/analyze`. Video: `.mp4 .mov .avi .webm`. Image: `.jpg .jpeg .png .webp`. Audio: `.wav .mp3 .flac .m4a`. Limit 32 MB by default (`DEEPFAKE_SHIELD_MAX_UPLOAD_BYTES`; Cloud Run caps HTTP/1 requests at 32 MiB). |
 | Output (video) | `AnalysisRecord` JSON. It contains the verdict, `confidence`, `fake_probability`, `real_probability`, `frames_analyzed`, `frame_scores[]` (frame id, timestamp, probability, face box, image URLs), resolution, fps, duration, evidence signals, and suspicious timestamps. Each analyzed frame also gets two JPEG artifacts (frame and Grad-CAM heatmap). |
 | Output (image/audio) | Same record shape, but the scores come from a SHA-256 hash of the file bytes. They mean nothing. |
 

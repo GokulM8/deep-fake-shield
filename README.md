@@ -53,7 +53,8 @@ _Status as of 2026-10-30, branch `main`._
 | Concurrency / failure handling | 🟢 Fixed | D1–D3 fixed: inference lock, catch-all → `failed`, guaranteed upload cleanup |
 | Frontend quality | 🟡 Clean, untested | 0 TypeScript errors, 0 ESLint errors (10 warnings); **no frontend tests** |
 | Image / audio detection | ⚪ Placeholder | Upload contract exists; no trained models |
-| Persistence, auth, deployment | ⚪ Not started | In-memory records, no login, no Docker/CI/hosting |
+| Deployment | 🟡 Ready, not yet deployed | Branch `deploy`: Cloud Run Dockerfile, sync analysis, rate limit, private history, retention; frontend on Cloudflare. See [DEPLOYMENT.md](DEPLOYMENT.md) |
+| Persistence, auth | ⚪ Not started | In-memory records, no login |
 
 **In one sentence:** an honest, explainable video-deepfake MVP whose served model is a frozen CNN frame encoder with a learned video-level head; it scores very well on this dataset's test split, but its probabilities are uncalibrated and it has not been tested across datasets or identities.
 
